@@ -35,12 +35,18 @@ package megamek.common.moves;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.Vector;
 
 import megamek.common.*;
-import megamek.common.moves.MovePath.MoveStepType;
 import megamek.common.enums.BuildingType;
 import megamek.common.enums.MPBoosters;
+import megamek.common.moves.MovePath.MoveStepType;
 import megamek.common.options.OptionsConstants;
 import megamek.common.pathfinder.CachedEntityState;
 import megamek.common.planetaryconditions.Atmosphere;
@@ -493,9 +499,25 @@ public class MoveStep implements Serializable {
             setElevation(getElevation() + 1);
         } else if (isJumping()) {
             Hex hex = game.getBoard().getHex(getPosition());
-            int maxElevation = (getAvailableJumpMP(entity) +
+            Optional<Building> optionalBuilding = Optional.ofNullable(game.getBoard()
+                                                                            .getBuildingAt(entity.getPosition()));
+
+            boolean isInsideTheSameBuilding = false;
+            if (optionalBuilding.isPresent()) {
+                Optional<Building> optionalBuildingAtCurrentStep = Optional.ofNullable(game.getBoard()
+                                                                                             .getBuildingAt(getPosition()));
+                if (optionalBuildingAtCurrentStep.isPresent()) {
+                    isInsideTheSameBuilding = optionalBuildingAtCurrentStep.get().equals(optionalBuilding.get());
+                }
+            }
+
+            int maxElevation = entity.getElevation();
+            if (!isInsideTheSameBuilding) {
+                maxElevation = (getAvailableJumpMP(entity) +
                                       entity.getElevation() +
                                       game.getBoard().getHex(entity.getPosition()).getLevel()) - hex.getLevel();
+            }
+
             int building = hex.terrainLevel(Terrains.BLDG_ELEV);
             int depth = -hex.depth(true);
             int ceiling = hex.ceiling();
@@ -527,6 +549,7 @@ public class MoveStep implements Serializable {
             }
             if ((entity instanceof Infantry) && !grdDropship) {
                 // infantry can jump into a building
+                // Maybe this line is a bit too much, but it seems to work by coincidence
                 setElevation(Math.max(depth, Math.min(building, maxElevation)));
             } else {
                 int subDepth = Math.max(depth, building);
@@ -719,8 +742,9 @@ public class MoveStep implements Serializable {
     private MoveStep firstStepEval(Game game, Entity entity, MoveStep prev) {
         if (prev == null) {
             prev = initializePrevStepForFirstStep(game, entity);
-        } else if (prev.isFirstStep() && (
-              (prev.getType() == MoveStepType.CLIMB_MODE_ON) || (prev.getType() == MoveStepType.CLIMB_MODE_OFF))) {
+        } else if (prev.isFirstStep() &&
+                         ((prev.getType() == MoveStepType.CLIMB_MODE_ON) ||
+                                (prev.getType() == MoveStepType.CLIMB_MODE_OFF))) {
             setFirstStep(true);
         }
         return prev;
@@ -961,14 +985,6 @@ public class MoveStep implements Serializable {
         return distance;
     }
 
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public int getLeapDistance() {
-        return leapDistance;
-    }
-
     public int getFacing() {
         return facing;
     }
@@ -1023,22 +1039,6 @@ public class MoveStep implements Serializable {
 
     public boolean isEvading() {
         return isEvading;
-    }
-
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public boolean isShuttingDown() {
-        return isShuttingDown;
-    }
-
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public boolean isStartingUp() {
-        return isStartingUp;
     }
 
     public boolean isSelfDestructing() {
@@ -1250,14 +1250,6 @@ public class MoveStep implements Serializable {
         position = c;
     }
 
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public boolean isPrevStepOnPavement() {
-        return prevStepOnPavement;
-    }
-
     public int getTargetNumberMASC() {
         return targetNumberMASC;
     }
@@ -1302,14 +1294,6 @@ public class MoveStep implements Serializable {
         isProne = b;
     }
 
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    protected void setFlying(boolean b) {
-        isFlying = b;
-    }
-
     protected void setHullDown(boolean b) {
         isHullDown = b;
     }
@@ -1331,12 +1315,14 @@ public class MoveStep implements Serializable {
 
     /**
      * This function is POSSIBLY A HACK!
-     * DO NOT CALL THIS FUNCTION! I need to find out why this value is being set directly through a couple
-     * off functions in the MoveStep compilation process. It should use the {@link MoveStep#setUnloaded} but I don't
-     * know why it does this instead.
+     * <p>
+     * DO NOT CALL THIS FUNCTION! I need to find out why this value is being set directly through a couple off functions
+     * in the MoveStep compilation process. It should use the {@link MoveStep#setUnloaded} but I don't know why it does
+     * this instead.
+     *
      * @param b sets hasEverUnloaded to this value
      */
-    @Deprecated(since="0.50.07", forRemoval = true)
+    @Deprecated(since = "0.50.07", forRemoval = true)
     protected void setHasEverUnloaded(boolean b) {
         hasEverUnloaded = b;
     }
@@ -1371,14 +1357,6 @@ public class MoveStep implements Serializable {
 
     protected void setOnlyPavementOrRoad(boolean b) {
         onlyPavementOrRoad = b;
-    }
-
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    protected void setWiGEBonus(int i) {
-        wigeBonus = i;
     }
 
     protected void setTargetNumberMASC(int i) {
@@ -1422,14 +1400,6 @@ public class MoveStep implements Serializable {
     }
 
     /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    boolean isStackingViolation() {
-        return isStackingViolation;
-    }
-
-    /**
      * This function checks that a step is legal. And adjust the movement type. This only checks for things that can
      * make this step by itself illegal. Things that can make a step illegal as part of a movement path are considered
      * in MovePath.addStep.
@@ -1439,7 +1409,7 @@ public class MoveStep implements Serializable {
      * @param prev   The {@link MoveStep} previous step in the path.
      */
     private void compileIllegal(final Game game, final Entity entity, final MoveStep prev,
-                                CachedEntityState cachedEntityState) {
+          CachedEntityState cachedEntityState) {
         final MoveStepType stepType = getType();
         final boolean isInfantry = entity instanceof Infantry;
         final boolean isTank = entity instanceof Tank;
@@ -1684,9 +1654,9 @@ public class MoveStep implements Serializable {
                 Coords adjacentCoords = curPos.translated(curPos.direction(startingPosition));
                 Hex adjacentHex = game.getBoard().getHex(adjacentCoords);
 
-                boolean hasLOS = LosEffects.calculateLOS(
-                          game, entity, new FloorTarget(curPos, game.getBoard(), getElevation())
-                ).canSee();
+                boolean hasLOS = LosEffects.calculateLOS(game,
+                      entity,
+                      new FloorTarget(curPos, game.getBoard(), getElevation())).canSee();
 
                 if (adjacentHex.ceiling() >= getElevation() || !hasLOS) {
                     return; // can't enter the building from this direction
@@ -2537,14 +2507,6 @@ public class MoveStep implements Serializable {
         }
     }
 
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public int getTotalHeat() {
-        return totalHeat;
-    }
-
     public int getHeat() {
         return heat;
     }
@@ -2854,6 +2816,10 @@ public class MoveStep implements Serializable {
             throw ex;
         }
 
+        if ((type == MoveStepType.CLIMB_MODE_ON) || (type == MoveStepType.CLIMB_MODE_OFF)) {
+            return true;
+        }
+
         // Assault dropping units cannot move
         if ((entity.isAssaultDropInProgress() || entity.isDropping()) &&
                   !((entity instanceof LandAirMek) &&
@@ -2916,9 +2882,15 @@ public class MoveStep implements Serializable {
         }
 
         final int srcAlt = srcEl + srcHex.getLevel();
-        final int destAlt = elevation + destHex.getLevel();
 
         Building bld = game.getBoard().getBuildingAt(dest);
+
+        final int destAlt;
+        if (bld != null && getEntity().getElevation() == 0 && climbMode) {
+            destAlt = destHex.floor();
+        } else {
+            destAlt = elevation + destHex.getLevel();
+        }
 
         if (bld != null) {
             // ProtoMeks that are jumping can't change the level inside a building,
@@ -3304,6 +3276,20 @@ public class MoveStep implements Serializable {
             return false;
         }
 
+        // Jumping inside a building to another hex of the same building is illegal
+        Coords startingPosition = getEntity().getPosition();
+        Hex startingHex = game.getBoard().getHex(startingPosition);
+        if (!destHex.getCoords().equals(startingPosition) &&
+                  isJumping() &&
+                  startingHex.containsTerrain(Terrains.BUILDING) &&
+                  destHex.containsTerrain(Terrains.BUILDING) &&
+                  srcEl < srcHex.terrainLevel(Terrains.BLDG_ELEV) &&
+                  (game.getBoard()
+                         .getBuildingAt(startingPosition)
+                         .equals(game.getBoard().getBuildingAt(getPosition())))) {
+            return false;
+        }
+
         // If we are *in* restricted terrain, we can only leave via roads.
         if ((movementType != EntityMovementType.MOVE_JUMP) &&
                   (movementType != EntityMovementType.MOVE_VTOL_WALK) &&
@@ -3414,14 +3400,6 @@ public class MoveStep implements Serializable {
 
     public int getMineToLay() {
         return mineToLay;
-    }
-
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    protected void setMineToLay(int mineId) {
-        mineToLay = mineId;
     }
 
     public int getBraceLocation() {
@@ -3690,14 +3668,6 @@ public class MoveStep implements Serializable {
         return recoveryUnit;
     }
 
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    protected void setRecoveryUnit(int i) {
-        recoveryUnit = i;
-    }
-
     public int getManeuverType() {
         return maneuverType;
     }
@@ -3726,16 +3696,6 @@ public class MoveStep implements Serializable {
      */
     public Map<Integer, Integer> getAdditionalData() {
         return additionalData;
-    }
-
-    /**
-     * Setter for serialization purposes
-     *
-     * @deprecated No indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public void setAdditionalData(Map<Integer, Integer> value) {
-        additionalData = value;
     }
 
     /**
