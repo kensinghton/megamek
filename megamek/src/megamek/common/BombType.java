@@ -630,10 +630,10 @@ public class BombType extends AmmoType {
         bomb.bv = 18;
         bomb.cost = 15000;
         bomb.rulesRefs = "229, TM";
-        bomb.techAdvancement.setTechBase(TechAdvancement.TechBase.IS);
-        bomb.techAdvancement.setISAdvancement(3055, 3064, 3067);
-        bomb.techAdvancement.setTechRating(TechRating.B);
-        bomb.techAdvancement.setAvailability(AvailabilityValue.X, AvailabilityValue.X, AvailabilityValue.B, AvailabilityValue.B);
+        bomb.techAdvancement.setTechBase(TechAdvancement.TechBase.IS)
+            .setISAdvancement(3055, 3064, 3067)
+            .setTechRating(TechRating.B)
+            .setAvailability(AvailabilityValue.X, AvailabilityValue.X, AvailabilityValue.B, AvailabilityValue.B);
 
         return bomb;
     }
@@ -781,5 +781,12 @@ public class BombType extends AmmoType {
                 .setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL);
 
         return bomb;
+    }
+
+    /**
+     * @return True when this bomb type is either a large or small FAE.
+     */
+    public boolean isFaeBomb() {
+        return (bombType == B_FAE_LARGE) || (bombType == B_FAE_SMALL);
     }
 }

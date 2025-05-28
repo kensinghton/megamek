@@ -25,16 +25,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Vector;
 
-import megamek.client.ui.swing.calculationReport.CalculationReport;
+import megamek.client.ui.clientGUI.calculationReport.CalculationReport;
 import megamek.common.cost.AeroCostCalculator;
 import megamek.common.enums.AimingMode;
 import megamek.common.equipment.AmmoMounted;
 import megamek.common.equipment.WeaponMounted;
 import megamek.common.options.OptionsConstants;
 import megamek.common.planetaryconditions.PlanetaryConditions;
+import megamek.common.util.ConditionalStringJoiner;
 import megamek.logging.MMLogger;
 import megamek.common.TechAdvancement.AdvancementPhase;
-import megamek.common.ITechnology;
 
 /**
  * Taharqa's attempt at creating an Aerospace entity
@@ -1084,7 +1084,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
         }
 
         // if in atmosphere, then halve next turn's velocity
-        if (!game.getBoard().inSpace() && isDeployed() && (roundNumber > 0)) {
+        if (!isSpaceborne() && isDeployed()) {
             setNextVelocity((int) Math.floor(getNextVelocity() / 2.0));
         }
 
@@ -1468,13 +1468,13 @@ public abstract class Aero extends Entity implements IAero, IBomber {
 
         int vel = getCurrentVelocity();
         int velocityMod = vel - (2 * getWalkMP());
-        if (!getGame().getBoard().inSpace() && (velocityMod > 0)) {
+        if (!isSpaceborne() && (velocityMod > 0)) {
             prd.addModifier(velocityMod, "Velocity greater than 2x safe thrust");
         }
 
         PlanetaryConditions conditions = game.getPlanetaryConditions();
         // add in atmospheric effects later
-        boolean spaceOrVacuum = game.getBoard().inSpace() || conditions.getAtmosphere().isVacuum();
+        boolean spaceOrVacuum = isSpaceborne() || conditions.getAtmosphere().isVacuum();
         if (!spaceOrVacuum && isAirborne()) {
             prd.addModifier(+2, "Atmospheric operations");
 
@@ -1511,10 +1511,10 @@ public abstract class Aero extends Entity implements IAero, IBomber {
         }
 
         // quirks?
-        if (hasQuirk(OptionsConstants.QUIRK_POS_ATMO_FLYER) && !game.getBoard().inSpace()) {
+        if (hasQuirk(OptionsConstants.QUIRK_POS_ATMO_FLYER) && !isSpaceborne()) {
             prd.addModifier(-1, "atmospheric flyer");
         }
-        if (hasQuirk(OptionsConstants.QUIRK_NEG_ATMO_INSTABILITY) && !game.getBoard().inSpace()) {
+        if (hasQuirk(OptionsConstants.QUIRK_NEG_ATMO_INSTABILITY) && !isSpaceborne()) {
             prd.addModifier(+1, "atmospheric flight instability");
         }
         if (hasQuirk(OptionsConstants.QUIRK_NEG_CRAMPED_COCKPIT) && !hasAbility(OptionsConstants.UNOFF_SMALL_PILOT)) {
@@ -1750,11 +1750,6 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     }
 
     @Override
-    public boolean doomedOnGround() {
-        return (game != null) && !game.getOptions().booleanOption(OptionsConstants.ADVAERORULES_AERO_GROUND_MOVE);
-    }
-
-    @Override
     public boolean doomedInAtmosphere() {
         return false;
     }
@@ -1888,7 +1883,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     @Override
     public int sideTableRam(Coords src) {
         int side = super.sideTableRam(src);
-        if (game.useVectorMove() && game.getBoard().inSpace()) {
+        if (game.useVectorMove() && game.getBoard().isSpace()) {
             int newSide = chooseSideRam(src);
             if (newSide != -1) {
                 side = newSide;
@@ -2074,12 +2069,16 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     }
 
     @Override
-    public boolean isLocationProhibited(Coords c, int currElevation) {
-        if ((currElevation != 0) || isSpaceborne()) {
+    public boolean isLocationProhibited(Coords testPosition, int testBoardId, int testAltitude) {
+        if (!game.hasBoardLocation(testPosition, testBoardId)) {
+            return true;
+        }
+
+        if ((testAltitude != 0) || isSpaceborne()) {
             return false;
         }
 
-        Hex hex = game.getBoard().getHex(c);
+        Hex hex = game.getHex(testPosition, testBoardId);
 
         // Additional restrictions for hidden units
         if (isHidden()) {
@@ -2088,7 +2087,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
                 return true;
             }
             // Can't deploy on a bridge
-            if ((hex.terrainLevel(Terrains.BRIDGE_ELEV) == currElevation) && hex.containsTerrain(Terrains.BRIDGE)) {
+            if ((hex.terrainLevel(Terrains.BRIDGE_ELEV) == testAltitude) && hex.containsTerrain(Terrains.BRIDGE)) {
                 return true;
             }
             // Can't deploy on the surface of water
@@ -2098,14 +2097,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
         }
 
         // grounded aerospace have the same prohibitions as wheeled tanks
-        return hex.containsTerrain(Terrains.WOODS) ||
-                     hex.containsTerrain(Terrains.ROUGH) ||
-                     ((hex.terrainLevel(Terrains.WATER) > 0) && !hex.containsTerrain(Terrains.ICE)) ||
-                     hex.containsTerrain(Terrains.RUBBLE) ||
-                     hex.containsTerrain(Terrains.MAGMA) ||
-                     hex.containsTerrain(Terrains.JUNGLE) ||
-                     (hex.terrainLevel(Terrains.SNOW) > 1) ||
-                     (hex.terrainLevel(Terrains.GEYSER) == 2);
+        return taxingAeroProhibitedTerrains(hex);
     }
 
     @Override
@@ -2264,7 +2256,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     @Override
     public int getECMRange() {
         if (!game.getOptions().booleanOption(OptionsConstants.ADVAERORULES_STRATOPS_ECM) ||
-                  !game.getBoard().inSpace()) {
+                  !isSpaceborne()) {
             return super.getECMRange();
         }
         return Math.min(super.getECMRange(), 0);
@@ -2276,7 +2268,7 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     @Override
     public double getECCMStrength() {
         if (!game.getOptions().booleanOption(OptionsConstants.ADVAERORULES_STRATOPS_ECM) ||
-                  !game.getBoard().inSpace()) {
+                  !isSpaceborne()) {
             return super.getECCMStrength();
         }
         if (hasActiveECCM()) {
@@ -2419,20 +2411,18 @@ public abstract class Aero extends Entity implements IAero, IBomber {
 
     @Override
     public int getElevation() {
-        if ((game != null) && game.getBoard().inSpace()) {
+        if ((game != null) && isSpaceborne()) {
             return 0;
         }
-        // Altitude is not the same as elevation. If an aero is at 0 altitude, then it
-        // is grounded
-        // and uses elevation normally. Otherwise, just set elevation to a very large
-        // number so that
+        // Altitude is not the same as elevation. If an aero is at 0 altitude, then it is grounded
+        // and uses elevation normally. Otherwise, just set elevation to a very large number so that
         // a flying aero won't interact with the ground maps in any way
         return isAirborne() ? AERO_EFFECTIVE_ELEVATION : super.getElevation();
     }
 
     @Override
     public boolean canGoDown() {
-        return canGoDown(altitude, getPosition());
+        return canGoDown(altitude, getPosition(), getBoardId());
     }
 
     @Override
@@ -2446,84 +2436,34 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     }
 
     public String getCritDamageString() {
-        StringBuilder toReturn = new StringBuilder();
-        boolean first = true;
-        if (getSensorHits() > 0) {
-            toReturn.append(String.format(Messages.getString("Aero.sensorDamageString"), getSensorHits()));
-            first = false;
-        }
-        if (getAvionicsHits() > 0) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(String.format(Messages.getString("Aero.avionicsDamageString"), getAvionicsHits()));
-            first = false;
-        }
-        if (getFCSHits() > 0) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(String.format(Messages.getString("Aero.fcsDamageString"), getFCSHits()));
-            first = false;
-        }
-        if (getCICHits() > 0) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(String.format(Messages.getString("Aero.cicDamageString"), getCICHits()));
-            first = false;
-        }
-        if (isGearHit()) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(Messages.getString("Aero.landingGearDamageString"));
-            first = false;
-        }
-        if (!hasLifeSupport()) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(Messages.getString("Aero.lifeSupportDamageString"));
-            first = false;
-        }
-        if (getLeftThrustHits() > 0) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(String.format(Messages.getString("Aero.leftThrusterDamageString"), getLeftThrustHits()));
-            first = false;
-        }
-        if (getRightThrustHits() > 0) {
-            if (!first) {
-                toReturn.append(", ");
-            }
-            toReturn.append(String.format(Messages.getString("Aero.rightThrusterDamageString"), getRightThrustHits()));
-            first = false;
-        }
+        ConditionalStringJoiner conditionalStringJoiner = new ConditionalStringJoiner();
+        conditionalStringJoiner.add(getEngineHits() > 0,
+              () -> String.format(Messages.getString("Aero.engineDamageString"), getEngineHits()));
+        conditionalStringJoiner.add(getSensorHits() > 0,
+              () -> String.format(Messages.getString("Aero.sensorDamageString"), getSensorHits()));
+        conditionalStringJoiner.add(getAvionicsHits() > 0,
+              () -> String.format(Messages.getString("Aero.avionicsDamageString"), getAvionicsHits()));
+        conditionalStringJoiner.add(getFCSHits() > 0,
+              () -> String.format(Messages.getString("Aero.fcsDamageString"), getFCSHits()));
+        conditionalStringJoiner.add(getCICHits() > 0,
+              () -> String.format(Messages.getString("Aero.cicDamageString"), getCICHits()));
+        conditionalStringJoiner.add(isGearHit(),
+              () -> String.format(Messages.getString("Aero.landingGearDamageString"), isGearHit()));
+        conditionalStringJoiner.add(!hasLifeSupport(),
+              () -> Messages.getString("Aero.lifeSupportDamageString"));
+        conditionalStringJoiner.add(getLeftThrustHits() > 0,
+              () -> String.format(Messages.getString("Aero.leftThrusterDamageString"), getLeftThrustHits()));
+        conditionalStringJoiner.add(getRightThrustHits() > 0,
+              () -> String.format(Messages.getString("Aero.rightThrusterDamageString"), getRightThrustHits()));
         // Cargo bays and bay doors for large craft
-        for (Bay next : getTransportBays()) {
-            if (next.getBayDamage() > 0) {
-                if (!first) {
-                    toReturn.append(", ");
-                }
-                toReturn.append(String.format(Messages.getString("Aero.bayDamageString"),
-                      next.getType(),
-                      next.getBayNumber()));
-                first = false;
-            }
-            if (next.getCurrentDoors() < next.getDoors()) {
-                if (!first) {
-                    toReturn.append(", ");
-                }
-                toReturn.append(String.format(Messages.getString("Aero.bayDoorDamageString"),
-                      next.getType(),
-                      next.getBayNumber(),
-                      (next.getDoors() - next.getCurrentDoors())));
-                first = false;
-            }
+        for (Bay transportBay : getTransportBays()) {
+            conditionalStringJoiner.add(transportBay.getBayDamage() > 0,
+                  () -> String.format(Messages.getString("Aero.bayDamageString"), transportBay.getType(), transportBay.getBayNumber()));
+            conditionalStringJoiner.add(transportBay.getCurrentDoors() < transportBay.getDoors(),
+                  () -> String.format(Messages.getString("Aero.bayDoorDamageString"), transportBay.getType(), transportBay.getBayNumber(),
+                        (transportBay.getDoors() - transportBay.getCurrentDoors())));
         }
-        return toReturn.toString();
+        return conditionalStringJoiner.toString();
     }
 
     @Override
