@@ -292,8 +292,7 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
     }
 
     public int getAirMekCruiseMP(MPCalculationSetting mpCalculationSetting) {
-        if (game != null &&
-                  game.getBoard().inAtmosphere() &&
+        if (game != null && game.isOnAtmosphericMap(this) &&
                   (isLocationBad(Mek.LOC_LT) || isLocationBad(Mek.LOC_RT))) {
             return 0;
         }
@@ -301,8 +300,7 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
     }
 
     public int getAirMekFlankMP(MPCalculationSetting mpCalculationSetting) {
-        if (game != null &&
-                  game.getBoard().inAtmosphere() &&
+        if (game != null && game.isOnAtmosphericMap(this) &&
                   (isLocationBad(Mek.LOC_LT) || isLocationBad(Mek.LOC_RT))) {
             return 0;
         }
@@ -544,13 +542,18 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
     }
 
     @Override
-    public boolean isLocationProhibited(Coords c, int currElevation) {
+    public boolean isLocationProhibited(Coords c, int testBoardId, int testElevation) {
+        if (!game.hasBoardLocation(c, testBoardId)) {
+            return true;
+        }
+
         // Fighter mode has the same terrain restrictions as ASFs.
         if (getConversionMode() == CONV_MODE_FIGHTER) {
             if (isAirborne()) {
                 return false;
             }
-            Hex hex = game.getBoard().getHex(c);
+
+            Hex hex = game.getHex(c, testBoardId);
 
             // Additional restrictions for hidden units
             if (isHidden()) {
@@ -559,34 +562,27 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
                     return true;
                 }
                 // Can't deploy on a bridge
-                if ((hex.terrainLevel(Terrains.BRIDGE_ELEV) == currElevation) && hex.containsTerrain(Terrains.BRIDGE)) {
+                if ((hex.terrainLevel(Terrains.BRIDGE_ELEV) == testElevation) && hex.containsTerrain(Terrains.BRIDGE)) {
                     return true;
                 }
                 // Can't deploy on the surface of water
-                if (hex.containsTerrain(Terrains.WATER) && (currElevation == 0)) {
+                if (hex.containsTerrain(Terrains.WATER) && (testElevation == 0)) {
                     return true;
                 }
             }
 
             // grounded aeros have the same prohibitions as wheeled tanks
-            return hex.containsTerrain(Terrains.WOODS) ||
-                         hex.containsTerrain(Terrains.ROUGH) ||
-                         ((hex.terrainLevel(Terrains.WATER) > 0) && !hex.containsTerrain(Terrains.ICE)) ||
-                         hex.containsTerrain(Terrains.RUBBLE) ||
-                         hex.containsTerrain(Terrains.MAGMA) ||
-                         hex.containsTerrain(Terrains.JUNGLE) ||
-                         (hex.terrainLevel(Terrains.SNOW) > 1) ||
-                         (hex.terrainLevel(Terrains.GEYSER) == 2);
-        } else if (getConversionMode() == CONV_MODE_AIRMEK && currElevation > 0) {
+            return taxingAeroProhibitedTerrains(hex);
+        } else if (getConversionMode() == CONV_MODE_AIRMEK && testElevation > 0) {
             // Cannot enter woods or a building hex in AirMek mode unless using ground movement or flying over the
             // terrain.
-            Hex hex = game.getBoard().getHex(c);
+            Hex hex = game.getHex(c, testBoardId);
             return (hex.containsTerrain(Terrains.WOODS) ||
                           hex.containsTerrain(Terrains.JUNGLE) ||
-                          hex.containsTerrain(Terrains.BLDG_ELEV)) && hex.ceiling() > currElevation;
+                          hex.containsTerrain(Terrains.BLDG_ELEV)) && hex.ceiling() > testElevation;
         } else {
             // Mek mode or AirMek mode using ground MP have the same restrictions as Biped Mek.
-            return super.isLocationProhibited(c, currElevation);
+            return super.isLocationProhibited(c, testBoardId, testElevation);
         }
     }
 
@@ -656,11 +652,11 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
      */
     @Override
     public int getECMRange() {
-        if (!game.getOptions().booleanOption(OptionsConstants.ADVAERORULES_STRATOPS_ECM) ||
-                  !game.getBoard().inSpace()) {
+        if (isActiveOption(OptionsConstants.ADVAERORULES_STRATOPS_ECM) && isSpaceborne()) {
+            return Math.min(super.getECMRange(), 0);
+        } else {
             return super.getECMRange();
         }
-        return Math.min(super.getECMRange(), 0);
     }
 
     /**
@@ -732,21 +728,21 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
 
             int vel = getCurrentVelocity();
             int vmod = vel - (2 * getWalkMP());
-            if (!getGame().getBoard().inSpace() && (vmod > 0)) {
+            if (!isSpaceborne() && (vmod > 0)) {
                 roll.addModifier(vmod, "Velocity greater than 2x safe thrust");
             }
 
             PlanetaryConditions conditions = game.getPlanetaryConditions();
             // add in atmospheric effects later
-            boolean spaceOrVacuum = game.getBoard().inSpace() || conditions.getAtmosphere().isVacuum();
+            boolean spaceOrVacuum = isSpaceborne() || conditions.getAtmosphere().isVacuum();
             if (!spaceOrVacuum && isAirborne()) {
                 roll.addModifier(+1, "Atmospheric operations");
             }
 
-            if (hasQuirk(OptionsConstants.QUIRK_POS_ATMO_FLYER) && !game.getBoard().inSpace()) {
+            if (hasQuirk(OptionsConstants.QUIRK_POS_ATMO_FLYER) && !isSpaceborne()) {
                 roll.addModifier(-1, "atmospheric flyer");
             }
-            if (hasQuirk(OptionsConstants.QUIRK_NEG_ATMO_INSTABILITY) && !game.getBoard().inSpace()) {
+            if (hasQuirk(OptionsConstants.QUIRK_NEG_ATMO_INSTABILITY) && !isSpaceborne()) {
                 roll.addModifier(+1, "atmospheric flight instability");
             }
         }
@@ -860,7 +856,7 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
 
         if (getConversionMode() == CONV_MODE_FIGHTER) {
             // if in atmosphere, then halve next turn's velocity
-            if (!game.getBoard().inSpace() && isDeployed() && (roundNumber > 0)) {
+            if (!isSpaceborne() && isDeployed() && (roundNumber > 0)) {
                 setNextVelocity((int) Math.floor(getNextVelocity() / 2.0));
             }
 
@@ -918,7 +914,7 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
      */
     @Override
     public EntityMovementMode nextConversionMode(EntityMovementMode afterMode) {
-        boolean inSpace = game != null && game.getBoard().inSpace();
+        boolean inSpace = game != null && isSpaceborne();
         if (previousMovementMode == EntityMovementMode.WIGE) {
             if (afterMode == EntityMovementMode.WIGE) {
                 return EntityMovementMode.AERODYNE;
@@ -938,14 +934,6 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
 
     public boolean canConvertTo(EntityMovementMode toMode) {
         return canConvertTo(getConversionMode(), getConversionModeFor(toMode));
-    }
-
-    /**
-     * @deprecated No indicated Uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public boolean canConvertTo(int fromMode, EntityMovementMode toMode) {
-        return canConvertTo(fromMode, getConversionModeFor(toMode));
     }
 
     /**
@@ -993,12 +981,12 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
         } else if (toMode == CONV_MODE_FIGHTER) {
             // Standard LAMs can convert from mek to fighter mode in a single round on a space map
             if (fromMode == CONV_MODE_MEK) {
-                return getLAMType() == LAM_BIMODAL || game.getBoard().inSpace();
+                return getLAMType() == LAM_BIMODAL || isSpaceborne();
             }
         } else if (toMode == CONV_MODE_MEK) {
             // Standard LAMs can convert from fighter to mek mode in a single round on a space map
             if (fromMode == CONV_MODE_FIGHTER) {
-                return getLAMType() == LAM_BIMODAL || game.getBoard().inSpace();
+                return getLAMType() == LAM_BIMODAL || isSpaceborne();
             }
         }
         return true;
@@ -1020,24 +1008,24 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
     }
 
     private static final TechAdvancement[] TA_LAM = {
-          new TechAdvancement(TECH_BASE_IS).setISAdvancement(2683, 2688, DATE_NONE, 3085)
+          new TechAdvancement(TechBase.IS).setISAdvancement(2683, 2688, DATE_NONE, 3085)
                 .setClanAdvancement(DATE_NONE, 2688, DATE_NONE, 2825)
-                .setPrototypeFactions(F_TH)
-                .setProductionFactions(F_TH)
-                .setTechRating(RATING_D)
-                .setAvailability(RATING_D,
-                      RATING_E,
-                      RATING_F,
-                      RATING_F).setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL), // standard
-          new TechAdvancement(TECH_BASE_IS).setISAdvancement(2680, 2684, DATE_NONE, 2781)
+                .setPrototypeFactions(Faction.TH)
+                .setProductionFactions(Faction.TH)
+                .setTechRating(TechRating.D)
+                .setAvailability(AvailabilityValue.D,
+                      AvailabilityValue.E,
+                      AvailabilityValue.F,
+                      AvailabilityValue.F).setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL), // standard
+          new TechAdvancement(TechBase.IS).setISAdvancement(2680, 2684, DATE_NONE, 2781)
                 .setClanAdvancement(DATE_NONE, 2684, DATE_NONE, 2801)
-                .setPrototypeFactions(F_TH)
-                .setProductionFactions(F_TH)
-                .setTechRating(RATING_E)
-                .setAvailability(RATING_E,
-                      RATING_F,
-                      RATING_X,
-                      RATING_X).setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL) // bimodal
+                .setPrototypeFactions(Faction.TH)
+                .setProductionFactions(Faction.TH)
+                .setTechRating(TechRating.E)
+                .setAvailability(AvailabilityValue.E,
+                      AvailabilityValue.F,
+                      AvailabilityValue.X,
+                      AvailabilityValue.X).setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL) // bimodal
     };
 
     @Override
@@ -1088,14 +1076,6 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
 
     public void setWhoFirst() {
         whoFirst = Compute.randomInt(500);
-    }
-
-    /**
-     * @deprecated no indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public int getWhoFirst() {
-        return whoFirst;
     }
 
     public int getMaxBombPoints() {
@@ -1774,7 +1754,7 @@ public class LandAirMek extends BipedMek implements IAero, IBomber {
 
     @Override
     public int getElevation() {
-        if ((game != null) && game.getBoard().inSpace()) {
+        if (isSpaceborne()) {
             return 0;
         }
         // Altitude is not the same as elevation. If an aero is at 0 altitude, then it is grounded and uses elevation

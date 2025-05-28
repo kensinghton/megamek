@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 
-import megamek.client.ui.swing.calculationReport.CalculationReport;
+import megamek.client.ui.clientGUI.calculationReport.CalculationReport;
 import megamek.common.cost.CombatVehicleCostCalculator;
 import megamek.common.enums.AimingMode;
 import megamek.common.enums.GamePhase;
@@ -270,15 +270,15 @@ public class Tank extends Entity {
         motivePenalty = p;
     }
 
-    private static final TechAdvancement TA_COMBAT_VEHICLE = new TechAdvancement(TECH_BASE_ALL).setAdvancement(DATE_NONE,
+    private static final TechAdvancement TA_COMBAT_VEHICLE = new TechAdvancement(TechBase.ALL).setAdvancement(DATE_NONE,
                 2470,
                 2490)
-                                                                   .setProductionFactions(F_TH)
-                                                                   .setTechRating(RATING_D)
-                                                                   .setAvailability(RATING_C,
-                                                                         RATING_C,
-                                                                         RATING_C,
-                                                                         RATING_B)
+                                                                   .setProductionFactions(Faction.TH)
+                                                                   .setTechRating(TechRating.D)
+                                                                   .setAvailability(AvailabilityValue.C,
+                                                                         AvailabilityValue.C,
+                                                                         AvailabilityValue.C,
+                                                                         AvailabilityValue.B)
                                                                    .setStaticTechLevel(SimpleTechLevel.INTRO);
 
     @Override
@@ -288,10 +288,10 @@ public class Tank extends Entity {
 
     // Advanced turrets
     public static TechAdvancement getDualTurretTA() {
-        return new TechAdvancement(TECH_BASE_ALL).setAdvancement(DATE_PS, DATE_NONE, 3080)
+        return new TechAdvancement(TechBase.ALL).setAdvancement(DATE_PS, DATE_NONE, 3080)
                      .setApproximate(false, false, true)
-                     .setTechRating(RATING_B)
-                     .setAvailability(RATING_F, RATING_F, RATING_F, RATING_E)
+                     .setTechRating(TechRating.B)
+                     .setAvailability(AvailabilityValue.F, AvailabilityValue.F, AvailabilityValue.F, AvailabilityValue.E)
                      .setStaticTechLevel(SimpleTechLevel.STANDARD);
     }
 
@@ -656,8 +656,12 @@ public class Tank extends Entity {
      * Tanks have all sorts of prohibited terrain.
      */
     @Override
-    public boolean isLocationProhibited(Coords c, int currElevation) {
-        Hex hex = game.getBoard().getHex(c);
+    public boolean isLocationProhibited(Coords c, int testBoardId, int currElevation) {
+        if (!game.hasBoardLocation(c, testBoardId)) {
+            return true;
+        }
+
+        Hex hex = game.getHex(c, testBoardId);
         if (hex.containsTerrain(Terrains.IMPASSABLE)) {
             return true;
         }
@@ -1368,7 +1372,7 @@ public class Tank extends Entity {
         }
 
         // are we wheeled and in light snow?
-        Hex hex = game.getBoard().getHex(getPosition());
+        Hex hex = game.getHex(getPosition(), getBoardId());
         if ((null != hex) &&
                   (getMovementMode() == EntityMovementMode.WHEELED) &&
                   (hex.terrainLevel(Terrains.SNOW) == 1)) {
@@ -1766,21 +1770,6 @@ public class Tank extends Entity {
         return getMovementMode().equals(EntityMovementMode.SUBMARINE) || super.hasEnvironmentalSealing();
     }
 
-    @Override
-    public boolean doomedOnGround() {
-        return false;
-    }
-
-    @Override
-    public boolean doomedInAtmosphere() {
-        return true;
-    }
-
-    @Override
-    public boolean doomedInSpace() {
-        return true;
-    }
-
     /**
      * Checks to see if a Tank is capable of going hull-down. This is true if hull-down rules are enabled and the Tank
      * is in a fortified hex.
@@ -1792,7 +1781,10 @@ public class Tank extends Entity {
         // MoveStep line 2179 performs this same check
         // performing it here will allow us to disable the Hulldown button
         // if the movement is illegal
-        Hex occupiedHex = game.getBoard().getHex(getPosition());
+        if (!game.hasBoardLocation(getPosition(), getBoardId())) {
+            return false;
+        }
+        Hex occupiedHex = game.getHex(getBoardLocation());
         return occupiedHex.containsTerrain(Terrains.FORTIFIED) &&
                      game.getOptions().booleanOption(OptionsConstants.ADVGRNDMOV_TACOPS_HULL_DOWN);
     }
@@ -3132,10 +3124,5 @@ public class Tank extends Entity {
      */
     public boolean isSideLocation(int location) {
         return (location == Tank.LOC_LEFT) || (location == Tank.LOC_RIGHT);
-    }
-
-    @Override
-    public void clearInitiative(boolean bUseInitComp) {
-
     }
 }

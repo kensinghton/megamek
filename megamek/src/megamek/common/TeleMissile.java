@@ -19,7 +19,7 @@
  */
 package megamek.common;
 
-import megamek.client.ui.swing.calculationReport.CalculationReport;
+import megamek.client.ui.clientGUI.calculationReport.CalculationReport;
 
 /**
  * @author Jay Lawson
@@ -225,10 +225,5 @@ public class TeleMissile extends Aero {
     @Override
     public long getEntityType() {
         return Entity.ETYPE_AERO & Entity.ETYPE_TELEMISSILE;
-    }
-
-    @Override
-    public void clearInitiative(boolean bUseInitComp) {
-
     }
 }

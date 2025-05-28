@@ -107,8 +107,12 @@ public class VTOL extends Tank implements IBomber {
     }
 
     @Override
-    public boolean isLocationProhibited(Coords c, int elevation) {
-        Hex hex = game.getBoard().getHex(c);
+    public boolean isLocationProhibited(Coords c, int testBoardId, int elevation) {
+        if (!game.hasBoardLocation(c, testBoardId)) {
+            return true;
+        }
+
+        Hex hex = game.getHex(c, testBoardId);
 
         if (hex.containsAnyTerrainOf(IMPASSABLE, SPACE, SKY)) {
             return true;
@@ -697,9 +701,9 @@ public class VTOL extends Tank implements IBomber {
     }
 
     public static TechAdvancement getChinTurretTA() {
-        return new TechAdvancement(TECH_BASE_ALL)
+        return new TechAdvancement(TechBase.ALL)
                 .setAdvancement(DATE_PS, 3079, 3080).setApproximate(false, true, false)
-                .setTechRating(RATING_B).setAvailability(RATING_F, RATING_F, RATING_F, RATING_D)
+                .setTechRating(TechRating.B).setAvailability(AvailabilityValue.F, AvailabilityValue.F, AvailabilityValue.F, AvailabilityValue.D)
                 .setStaticTechLevel(SimpleTechLevel.ADVANCED);
     }
 

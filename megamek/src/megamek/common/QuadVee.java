@@ -130,13 +130,13 @@ public class QuadVee extends QuadMek {
 
     @Override
     public TechAdvancement getConstructionTechAdvancement() {
-    return new TechAdvancement(TECH_BASE_CLAN)
-            .setTechRating(RATING_F)
-            .setAvailability(RATING_X, RATING_X, RATING_X, RATING_F)
+    return new TechAdvancement(TechBase.CLAN)
+            .setTechRating(TechRating.F)
+            .setAvailability(AvailabilityValue.X, AvailabilityValue.X, AvailabilityValue.X, AvailabilityValue.F)
             .setClanAdvancement(3130, 3135, DATE_NONE, DATE_NONE, DATE_NONE)
             .setClanApproximate(true)
-            .setPrototypeFactions(F_CHH)
-            .setProductionFactions(F_CHH)
+            .setPrototypeFactions(Faction.CHH)
+            .setProductionFactions(Faction.CHH)
             .setStaticTechLevel(SimpleTechLevel.ADVANCED);
     }
 
@@ -486,7 +486,7 @@ public class QuadVee extends QuadMek {
                 }
             }
             // are we wheeled and in light snow?
-            Hex hex = game.getBoard().getHex(getPosition());
+            Hex hex = game.getHexOf(this);
             if ((null != hex) && getMovementMode().isWheeled()
                     && (hex.terrainLevel(Terrains.SNOW) == 1)) {
                 roll.addModifier(1, "thin snow");
@@ -529,7 +529,7 @@ public class QuadVee extends QuadMek {
     @Override
     public boolean canGoHullDown() {
         if (getConversionMode() == CONV_MODE_VEHICLE != convertingNow) {
-            Hex occupiedHex = game.getBoard().getHex(getPosition());
+            Hex occupiedHex = game.getHexOf(this);
             return occupiedHex.containsTerrain(Terrains.FORTIFIED)
                     && game.getOptions().booleanOption(OptionsConstants.ADVGRNDMOV_TACOPS_HULL_DOWN);
         }

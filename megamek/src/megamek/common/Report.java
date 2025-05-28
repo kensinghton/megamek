@@ -19,7 +19,7 @@
  */
 package megamek.common;
 
-import static megamek.client.ui.swing.util.UIUtil.uiGray;
+import static megamek.client.ui.util.UIUtil.uiGray;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -30,8 +30,8 @@ import javax.swing.JTextPane;
 import javax.swing.text.html.HTMLEditorKit;
 import javax.swing.text.html.StyleSheet;
 
-import megamek.client.ui.swing.GUIPreferences;
-import megamek.client.ui.swing.util.UIUtil;
+import megamek.client.ui.clientGUI.GUIPreferences;
+import megamek.client.ui.util.UIUtil;
 import megamek.common.annotations.Nullable;
 import megamek.logging.MMLogger;
 
@@ -327,6 +327,22 @@ public class Report implements ReportEntry {
      */
     public Report subject(int subjectId) {
         subject = subjectId;
+        return this;
+    }
+
+    /**
+     * Set the report's subject and add its description. This is equivalent to calling
+     * <pre>{@code
+     * report.subject(entity.getId());
+     * report.addDesc(entity);
+     * }</pre>
+     * Typically used in reports that start with {@literal "<data> (<data>) ..."}
+     *
+     * @return This Report to allow chaining
+     */
+    public Report with(Entity entity) {
+        subject(entity.getId());
+        addDesc(entity);
         return this;
     }
 
@@ -720,6 +736,7 @@ public class Report implements ReportEntry {
         Font font = new Font(GUIP.getReportFontType(), Font.PLAIN, UIUtil.FONT_SCALE1);
         int size = UIUtil.scaleForGUI(UIUtil.FONT_SCALE1);
 
+        // styleSheet.addRule("html { text-align: left; }");
         styleSheet
                 .addRule("pre { font-family: " + font.getFamily() + "; font-size: " + size + "pt; font-style:normal;}");
         styleSheet.addRule("a { color: " + hexColor(GUIP.getReportLinkColor()) + " }");

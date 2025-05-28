@@ -35,13 +35,11 @@ import megamek.client.bot.princess.FiringPlanCalculationParameters.Builder;
 import megamek.client.bot.princess.PathRanker.PathRankerType;
 import megamek.client.bot.princess.UnitBehavior.BehaviorType;
 import megamek.client.ui.SharedUtility;
-import megamek.client.ui.swing.phaseDisplay.TowLinkWarning;
+import megamek.client.ui.panels.phaseDisplay.TowLinkWarning;
 import megamek.codeUtilities.MathUtility;
 import megamek.codeUtilities.StringUtility;
 import megamek.common.*;
 import megamek.common.BulldozerMovePath.MPCostComparator;
-import megamek.common.moves.MovePath;
-import megamek.common.moves.MovePath.MoveStepType;
 import megamek.common.actions.ArtilleryAttackAction;
 import megamek.common.actions.DisengageAction;
 import megamek.common.actions.EntityAction;
@@ -54,6 +52,8 @@ import megamek.common.enums.AimingMode;
 import megamek.common.equipment.WeaponMounted;
 import megamek.common.event.GameCFREvent;
 import megamek.common.event.GamePlayerChatEvent;
+import megamek.common.moves.MovePath;
+import megamek.common.moves.MovePath.MoveStepType;
 import megamek.common.moves.MoveStep;
 import megamek.common.net.enums.PacketCommand;
 import megamek.common.net.packets.Packet;
@@ -389,20 +389,19 @@ public class Princess extends BotClient {
         if (behaviorSettings.iAmAPirate() && honorUtil instanceof HonorUtil honorUtilCast) {
             honorUtilCast.setIAmAPirate(behaviorSettings.iAmAPirate());
         }
-        if (getFallBack()) {
-            return;
-        }
-
-        for (final String targetCoords : behaviorSettings.getStrategicBuildingTargets()) {
-            if (!StringUtil.isPositiveInteger(targetCoords) || (4 != targetCoords.length())) {
-                continue;
+        // Fallback do not care for targets
+        if (!getFallBack()) {
+            for (final String targetCoords : behaviorSettings.getStrategicBuildingTargets()) {
+                if (!StringUtil.isPositiveInteger(targetCoords) || (4 != targetCoords.length())) {
+                    continue;
+                }
+                final String x = targetCoords.substring(0, 2);
+                final String y = targetCoords.replaceFirst(x, "");
+                // Need to subtract 1, since we are given a Hex number string,
+                // which is Coords X + 1Y + 1
+                final Coords coords = new Coords(MathUtility.parseInt(x) - 1, MathUtility.parseInt(y) - 1);
+                getStrategicBuildingTargets().add(coords);
             }
-            final String x = targetCoords.substring(0, 2);
-            final String y = targetCoords.replaceFirst(x, "");
-            // Need to subtract 1, since we are given a Hex number string,
-            // which is Coords X + 1Y + 1
-            final Coords coords = new Coords(MathUtility.parseInt(x) - 1, MathUtility.parseInt(y) - 1);
-            getStrategicBuildingTargets().add(coords);
         }
         spinUpThreshold = null;
         if (initialized) {
@@ -410,6 +409,7 @@ public class Princess extends BotClient {
             // propagate any changes the BasicPathRanker needs.
             initializePathRankers();
         }
+        sendPrincessSettings();
     }
 
     /**
@@ -485,11 +485,11 @@ public class Princess extends BotClient {
     }
 
     @Override
-    protected Vector<Coords> calculateArtyAutoHitHexes() {
+    protected Vector<BoardLocation> calculateArtyAutoHitHexes() {
         try {
             // currently returns no artillery hit spots
             // make an empty list
-            final PlayerIDAndList<Coords> artyAutoHitHexes = new PlayerIDAndList<>();
+            final PlayerIDAndList<BoardLocation> artyAutoHitHexes = new PlayerIDAndList<>();
             // attach my player id to it
             artyAutoHitHexes.setPlayerID(getLocalPlayer().getId());
             return artyAutoHitHexes;
@@ -561,10 +561,10 @@ public class Princess extends BotClient {
         int deployElevation = deployEntity.getElevation();
 
         if (deployEntity.isAero()) {
-            if (game.getBoard().onGround()) {
+            if (game.getBoard().isGround()) {
                 // keep the altitude set in the lobby, possibly starting grounded
                 deployElevation = deployEntity.getAltitude();
-            } else if (game.getBoard().inAtmosphere()) {
+            } else if (game.getBoard().isLowAltitude()) {
                 // try to keep the altitude set in the lobby, but stay above the terrain
                 var deploymentHelper = new AllowedDeploymentHelper(deployEntity,
                       deployCoords,
@@ -587,7 +587,7 @@ public class Princess extends BotClient {
             // Compensate for hex elevation where != 0...
             deployElevation -= deployHex.getLevel();
         }
-        deploy(entityNum, deployCoords, decentFacing, deployElevation);
+        deploy(entityNum, deployCoords, 0, decentFacing, deployElevation, new Vector<>(), false);
     }
 
     /**
@@ -1224,21 +1224,6 @@ public class Princess extends BotClient {
         plan.sortPlan();
 
         return plan.getEntityActionVector();
-    }
-
-    /**
-     * @deprecated consider {@link BotClient#deployMinefields()}
-     */
-    @Override
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    protected Vector<Minefield> calculateMinefieldDeployment() {
-        try {
-            // currently returns no minefields
-            // make an empty vector
-            return new Vector<>();
-        } catch (Exception ignored) {
-            return new Vector<>();
-        }
     }
 
     /**
@@ -2418,7 +2403,7 @@ public class Princess extends BotClient {
                         // Want to target buildings with hostile infantry / BA inside them, since
                         // there's no other way to attack them.
                         if (isEnemyInfantry(entity, coords) &&
-                                  Compute.isInBuilding(game, entity) &&
+                                  entity.isInBuilding() &&
                                   !entity.isHidden()) {
                             fireControlState.getAdditionalTargets().add(bt);
                             sendChat("Building in Hex " +
@@ -3253,7 +3238,7 @@ public class Princess extends BotClient {
 
                 // this condition is a simple check that we're not unloading infantry into deep space
                 // or into lava or some other such nonsense
-                boolean unloadFatal = loadedEntity.isBoardProhibited(getGame().getBoard().getType()) ||
+                boolean unloadFatal = loadedEntity.isBoardProhibited(getGame().getBoard()) ||
                                             loadedEntity.isLocationProhibited(pathEndpoint) ||
                                             loadedEntity.isLocationDeadly(pathEndpoint);
 
@@ -3296,7 +3281,7 @@ public class Princess extends BotClient {
               false);
 
         // Don't launch at high velocity in atmosphere or the fighters will be destroyed!
-        if (path.getFinalVelocity() > 2 && !game.getBoard().inSpace()) {
+        if (path.getFinalVelocity() > 2 && !game.getBoard().isSpace()) {
             return;
         }
 
@@ -3416,7 +3401,7 @@ public class Princess extends BotClient {
                 if (unitsUnloaded < maxDismountsPerBay) {
                     while (dismountIndex < dismountLocations.size()) {
                         // this condition is a simple check that we're not unloading units into fatal conditions
-                        boolean unloadFatal = loadedEntity.isBoardProhibited(getGame().getBoard().getType()) ||
+                        boolean unloadFatal = loadedEntity.isBoardProhibited(getGame().getBoard()) ||
                                                     loadedEntity.isLocationProhibited(dismountLocation) ||
                                                     loadedEntity.isLocationDeadly(dismountLocation);
 

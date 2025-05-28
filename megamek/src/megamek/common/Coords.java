@@ -29,15 +29,15 @@ import megamek.common.annotations.Nullable;
  * work clockwise around the hex, starting with zero at the top. For a hex with an even x, the hexes in directions 2 and
  * 4 (left and right downward) have the same y.
  * <pre>
- *      -y
- *       0
- *     _____
- *  5 /     \ 1
+ *       -y
+ *        0
+ *      _____
+ *   5 /     \ 1
  * -x /       \ +x
- *   \       /
- *  4 \_____/ 2
- *       3
- *      +y
+ *    \       /
+ *   4 \_____/ 2
+ *        3
+ *       +y
  * </pre>
  */
 public class Coords implements Serializable {
@@ -769,20 +769,6 @@ public class Coords implements Serializable {
 
     public double magnitude() {
         return Math.sqrt(x * x + y * y);
-    }
-
-    /**
-     * @deprecated No indicated uses.
-     */
-    @Deprecated(since = "0.50.05", forRemoval = true)
-    public double cosineSimilarity(Coords other) {
-        double dot = getX() * other.getX() + getY() * other.getY();
-        double magA = magnitude();
-        double magB = other.magnitude();
-        if (magA == 0 || magB == 0) {
-            return 0;
-        }
-        return dot / (magA * magB);
     }
 
     /**

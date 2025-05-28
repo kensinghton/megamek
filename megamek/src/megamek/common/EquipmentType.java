@@ -41,11 +41,13 @@ import java.util.stream.Collectors;
 
 import megamek.common.annotations.Nullable;
 import megamek.common.equipment.ArmorType;
+import megamek.common.util.YamlSerializerEquipmentType;
 import megamek.common.weapons.autocannons.HVACWeapon;
 import megamek.common.weapons.defensivepods.BPodWeapon;
 import megamek.common.weapons.defensivepods.MPodWeapon;
 import megamek.common.weapons.ppc.PPCWeapon;
 import megamek.logging.MMLogger;
+import megamek.common.TechAdvancement.AdvancementPhase;
 
 /**
  * Represents any type of equipment mounted on a 'Mek, excluding systems and actuators.
@@ -146,7 +148,7 @@ public class EquipmentType implements ITechnology {
      */
     protected String sortingName;
 
-    private Vector<String> namesVector = new Vector<String>();
+    protected Vector<String> namesVector = new Vector<String>();
 
     protected double tonnage = 0;
     protected int criticals = 0;
@@ -256,7 +258,7 @@ public class EquipmentType implements ITechnology {
     public Map<Integer, Integer> getTechLevels() {
         Map<Integer, Integer> techLevel = new HashMap<Integer, Integer>();
         if (isUnofficial()) {
-            if (techAdvancement.getTechBase() == TECH_BASE_CLAN) {
+            if (techAdvancement.getTechBase() == TechBase.CLAN) {
                 techLevel.put(techAdvancement.getIntroductionDate(true), TechConstants.T_CLAN_UNOFFICIAL);
             } else {
                 techLevel.put(techAdvancement.getIntroductionDate(true), TechConstants.T_IS_UNOFFICIAL);
@@ -280,7 +282,7 @@ public class EquipmentType implements ITechnology {
             techLevel.put(techAdvancement.getProductionDate(false), TechConstants.T_IS_ADVANCED);
         }
 
-        if (techAdvancement.getTechBase() == TECH_BASE_ALL && techAdvancement.getCommonDate() > 0) {
+        if (techAdvancement.getTechBase() == TechBase.ALL && techAdvancement.getCommonDate() > 0) {
             techLevel.put(techAdvancement.getCommonDate(true), TechConstants.T_TW_ALL);
         } else if (techAdvancement.getCommonDate(true) > 0) {
             techLevel.put(techAdvancement.getCommonDate(true), TechConstants.T_CLAN_TW);
@@ -901,21 +903,21 @@ public class EquipmentType implements ITechnology {
      * MiscType that does not have its own TechAdvancement.
      */
 
-    protected static final TechAdvancement TA_STANDARD_STRUCTURE = new TechAdvancement(TECH_BASE_ALL).setAdvancement(
+    protected static final TechAdvancement TA_STANDARD_STRUCTURE = new TechAdvancement(TechBase.ALL).setAdvancement(
                 2430,
                 2439,
                 2505)
                                                                          .setApproximate(true, false, false)
                                                                          .setIntroLevel(true)
-                                                                         .setTechRating(RATING_D)
-                                                                         .setAvailability(RATING_C,
-                                                                               RATING_C,
-                                                                               RATING_C,
-                                                                               RATING_C)
+                                                                         .setTechRating(TechRating.D)
+                                                                         .setAvailability(AvailabilityValue.C,
+                                                                               AvailabilityValue.C,
+                                                                               AvailabilityValue.C,
+                                                                               AvailabilityValue.C)
                                                                          .setStaticTechLevel(SimpleTechLevel.INTRO);
-    protected static final TechAdvancement TA_NONE = new TechAdvancement(TECH_BASE_ALL).setAdvancement(DATE_NONE)
-                                                           .setTechRating(RATING_A)
-                                                           .setAvailability(RATING_A, RATING_A, RATING_A, RATING_A)
+    protected static final TechAdvancement TA_NONE = new TechAdvancement(TechBase.ALL).setAdvancement(DATE_NONE)
+                                                           .setTechRating(TechRating.A)
+                                                           .setAvailability(AvailabilityValue.A, AvailabilityValue.A, AvailabilityValue.A, AvailabilityValue.A)
                                                            .setStaticTechLevel(SimpleTechLevel.INTRO);
 
     public static TechAdvancement getStructureTechAdvancement(int at, boolean clan) {
@@ -1001,22 +1003,22 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getTechRating() {
+    public TechRating getTechRating() {
         return techAdvancement.getTechRating();
     }
 
     @Override
     public boolean isClan() {
-        return techAdvancement.getTechBase() == TECH_BASE_CLAN;
+        return techAdvancement.getTechBase() == TechBase.CLAN;
     }
 
     @Override
     public boolean isMixedTech() {
-        return techAdvancement.getTechBase() == TECH_BASE_ALL;
+        return techAdvancement.getTechBase() == TechBase.ALL;
     }
 
     @Override
-    public int getTechBase() {
+    public TechBase getTechBase() {
         return techAdvancement.getTechBase();
     }
 
@@ -1040,7 +1042,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getIntroductionDate(boolean clan, int faction) {
+    public int getIntroductionDate(boolean clan, Faction faction) {
         return techAdvancement.getIntroductionDate(clan, faction);
     }
 
@@ -1055,7 +1057,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getExtinctionDate(boolean clan, int faction) {
+    public int getExtinctionDate(boolean clan, Faction faction) {
         return techAdvancement.getExtinctionDate(clan, faction);
     }
 
@@ -1070,7 +1072,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getReintroductionDate(boolean clan, int faction) {
+    public int getReintroductionDate(boolean clan, Faction faction) {
         return techAdvancement.getReintroductionDate(clan, faction);
     }
 
@@ -1136,6 +1138,16 @@ public class EquipmentType implements ITechnology {
         } catch (Exception e) {
             logger.error("", e);
         }
+    }
+
+
+    /**
+     * Constructs a map containing the YAML-serializable data for this equipment type.
+     * 
+     * @return A map containing the YAML-serializable data for this equipment type.
+     */
+    public Map<String, Object> getYamlData() {
+        return YamlSerializerEquipmentType.serialize(this);
     }
 
     public static void writeEquipmentExtendedDatabase(File f) {
@@ -1693,7 +1705,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getPrototypeDate(boolean clan, int faction) {
+    public int getPrototypeDate(boolean clan, Faction faction) {
         return techAdvancement.getPrototypeDate(clan, faction);
     }
 
@@ -1703,7 +1715,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getProductionDate(boolean clan, int faction) {
+    public int getProductionDate(boolean clan, Faction faction) {
         return techAdvancement.getProductionDate(clan, faction);
     }
 
@@ -1713,7 +1725,7 @@ public class EquipmentType implements ITechnology {
     }
 
     @Override
-    public int getBaseAvailability(int era) {
+    public AvailabilityValue getBaseAvailability(Era era) {
         return techAdvancement.getBaseAvailability(era);
     }
 

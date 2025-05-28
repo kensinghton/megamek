@@ -36,7 +36,7 @@ import java.util.List;
 
 import megamek.client.Client;
 import megamek.client.ratgenerator.ForceDescriptor;
-import megamek.client.ui.swing.ClientGUI;
+import megamek.client.ui.clientGUI.ClientGUI;
 import megamek.common.*;
 import megamek.common.AmmoType.Munitions;
 import megamek.common.containers.MunitionTree;
@@ -490,9 +490,9 @@ class TeamLoadOutGeneratorTest {
         when(mockGameOptions.intOption(OptionsConstants.ALLOWED_YEAR)).thenReturn(3070);
         tlg.updateOptionValues();
         Assertions.assertTrue(tlg.checkLegality(mType, "CC", "IS", false));
-        Assertions.assertFalse(tlg.checkLegality(mType, "FS", "IS", false));
-        Assertions.assertFalse(tlg.checkLegality(mType, "IS", "IS", false));
-        Assertions.assertFalse(tlg.checkLegality(mType, "CLAN", "CL", true));
+        Assertions.assertTrue(tlg.checkLegality(mType, "FS", "IS", false));
+        Assertions.assertTrue(tlg.checkLegality(mType, "IS", "IS", false));
+        Assertions.assertTrue(tlg.checkLegality(mType, "CLAN", "CL", true));
     }
 
     @Test
