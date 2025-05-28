@@ -519,7 +519,7 @@ public class CommonSettingsDialog extends AbstractButtonDialog
     private static final UnitDisplayOrderPreferences UDOP = UnitDisplayOrderPreferences.getInstance();
     private static final ButtonOrderPreferences BOP = ButtonOrderPreferences.getInstance();
 
-    private static final String[] LOCALE_CHOICES = { "en", "de", "ru", "es" };
+    private static final String[] LOCALE_CHOICES = { "en", "de", "ru", "es", "uk" };
 
     private static final Dimension LABEL_SPACER = new Dimension(5, 0);
     private static final Dimension DEPENDENT_INSET = new Dimension(25, 0);
@@ -1885,6 +1885,7 @@ public class CommonSettingsDialog extends AbstractButtonDialog
         displayLocale.addItem(Messages.getString("CommonSettingsDialog.locale.Deutsch"));
         displayLocale.addItem(Messages.getString("CommonSettingsDialog.locale.Russian"));
         displayLocale.addItem(Messages.getString("CommonSettingsDialog.locale.Spanish"));
+		displayLocale.addItem(Messages.getString("CommonSettingsDialog.locale.Ukrainian"));
         displayLocale.setMaximumSize(new Dimension(150, 40));
         row = new ArrayList<>();
         row.add(displayLocaleLabel);
