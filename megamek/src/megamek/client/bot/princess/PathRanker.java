@@ -41,7 +41,7 @@ import static megamek.client.ui.SharedUtility.predictLeapFallDamage;
 
 public abstract class PathRanker implements IPathRanker {
     private final static MMLogger logger = MMLogger.create(PathRanker.class);
-    private static final BotLogger botLogger = new BotLogger(PathRanker.class.getSimpleName());
+    private static final BotLogger botLogger = new BotLogger();
     // TODO: Introduce PathRankerCacheHelper class that contains "global" path
     // ranker state
     // TODO: Introduce FireControlCacheHelper class that contains "global" Fire
@@ -148,14 +148,14 @@ public abstract class PathRanker implements IPathRanker {
             return returnPaths;
         }
         botLogger.append(game, true);
-        // log the top 50 paths
-        int numPathsToLog = Math.min(50, returnPaths.size());
+        // log at most 500 paths
         int i = 0;
+        int maxRankedPaths = Math.max(500, returnPaths.size());
         for (RankedPath rankedPath : returnPaths) {
-            if (i >= numPathsToLog) {
+            if (maxRankedPaths == i) {
                 break;
             }
-            botLogger.append(rankedPath, i == 0);
+            botLogger.append(rankedPath, i);
             i++;
         }
 
@@ -289,10 +289,17 @@ public abstract class PathRanker implements IPathRanker {
         var ignoredTargets = owner.getBehaviorSettings().getIgnoredUnitTargets();
         var priorityTargets = getOwner().getBehaviorSettings().getPriorityUnitTargets();
         for (Entity enemy : enemies) {
+            // For now, skip anything not on the same map
+            if (!game.onTheSameBoard(me, enemy)) {
+                continue;
+            }
+
             // Skip airborne aero units as they're further away than they seem and hard to catch.
             // Also, skip withdrawing enemy bot units that are not priority targets skip ignored units
             if (enemy.isAirborneAeroOnGroundMap()
-                || (!priorityTargets.contains(enemy.getId()) && getOwner().getHonorUtil().isEnemyBroken(enemy.getId(), enemy.getOwnerId(), getOwner().getForcedWithdrawal()))
+                || (!priorityTargets.contains(enemy.getId())
+                  && getOwner().getHonorUtil().isEnemyBroken(enemy.getId(), enemy.getOwnerId(),
+                  getOwner().getForcedWithdrawal()))
                 || ignoredTargets.contains(enemy.getId())) {
                 continue;
             }
@@ -327,7 +334,7 @@ public abstract class PathRanker implements IPathRanker {
     /**
      * Calculates the probability that a unit can successfully complete the given movement path.
      * <p>
-     * This method evaluates all piloting skill rolls required along the path and computes the 
+     * This method evaluates all piloting skill rolls required along the path and computes the
      * combined probability of passing all of them. It accounts for:
      * <ul>
      *   <li>Piloting skill rolls from difficult terrain, elevation changes, etc.</li>
@@ -339,7 +346,7 @@ public abstract class PathRanker implements IPathRanker {
      * separately when evaluating immobile status. Results are cached to avoid redundant
      * calculations during path evaluation.
      * <p>
-     * The probability is expressed as a value between 0.0 (guaranteed failure) and 
+     * The probability is expressed as a value between 0.0 (guaranteed failure) and
      * 1.0 (guaranteed success).
      *
      * @param movePath The movement path to evaluate
@@ -431,19 +438,10 @@ public abstract class PathRanker implements IPathRanker {
         return SharedUtility.getPSRList(path);
     }
 
-    /**
-     * Returns distance to the unit's home edge.
-     * Gives the distance to the closest edge
-     *
-     * @param position Final coordinates of the proposed move.
-     * @param homeEdge Unit's home edge.
-     * @param game     The current {@link Game}
-     * @return The distance to the unit's home edge.
-     */
     @Override
-    public int distanceToHomeEdge(Coords position, CardinalEdge homeEdge, Game game) {
-        int width = game.getBoard().getWidth();
-        int height = game.getBoard().getHeight();
+    public int distanceToHomeEdge(Coords position, int boardId, CardinalEdge homeEdge, Game game) {
+        int width = game.getBoard(boardId).getWidth();
+        int height = game.getBoard(boardId).getHeight();
 
         int distance;
         switch (homeEdge) {
@@ -520,8 +518,8 @@ public abstract class PathRanker implements IPathRanker {
         // If we're jumping onto a building, make sure it can support our weight.
         if (path.isJumping()) {
             final Coords finalCoords = path.getFinalCoords();
-            final Building building = game.getBoard().getBuildingAt(finalCoords);
-            if (building == null) {
+            Optional<Building> building = game.getBuildingAt(finalCoords, path.getFinalBoardId());
+            if (building.isEmpty()) {
                 return false;
             }
 
@@ -530,9 +528,9 @@ public abstract class PathRanker implements IPathRanker {
             double mass = path.getEntity().getWeight() + 10;
 
             // Add the mass of anyone else standing in/on this building.
-            mass += owner.getMassOfAllInBuilding(game, finalCoords);
+            mass += owner.getMassOfAllInBuilding(game, finalCoords, path.getFinalBoardId());
 
-            return (mass > building.getCurrentCF(finalCoords));
+            return (mass > building.get().getCurrentCF(finalCoords));
         }
 
         // If we're not jumping, check each building to see if it will collapse if it
@@ -541,13 +539,13 @@ public abstract class PathRanker implements IPathRanker {
         final Enumeration<MoveStep> steps = path.getSteps();
         while (steps.hasMoreElements()) {
             final MoveStep step = steps.nextElement();
-            final Building building = game.getBoard().getBuildingAt(step.getPosition());
+            final Building building = game.getBoard(step.getBoardId()).getBuildingAt(step.getPosition());
             if (building == null) {
                 continue;
             }
 
             // Add the mass of anyone else standing in/on this building.
-            double fullMass = mass + owner.getMassOfAllInBuilding(game, step.getPosition());
+            double fullMass = mass + owner.getMassOfAllInBuilding(game, step.getPosition(), step.getBoardId());
 
             if (fullMass > building.getCurrentCF(step.getPosition())) {
                 return true;
@@ -568,6 +566,11 @@ public abstract class PathRanker implements IPathRanker {
         int xTotal = 0;
         int yTotal = 0;
         int friendOnBoardCount = 0;
+        Entity me = game.getEntity(myId);
+        if (me == null) {
+            return null;
+        }
+        Board board = game.getBoard(me);
 
         for (Entity friend : friends) {
             if (friend.getId() == myId) {
@@ -575,11 +578,11 @@ public abstract class PathRanker implements IPathRanker {
             }
 
             // Skip any friends not on the board.
-            if (friend.isOffBoard()) {
+            if (friend.isOffBoard() || !game.onTheSameBoard(me, friend)) {
                 continue;
             }
             Coords friendPosition = friend.getPosition();
-            if ((friendPosition == null) || !game.getBoard().contains(friendPosition)) {
+            if ((friendPosition == null) || !board.contains(friendPosition)) {
                 continue;
             }
 
@@ -596,7 +599,7 @@ public abstract class PathRanker implements IPathRanker {
         int yCenter = Math.round((float) yTotal / friendOnBoardCount);
         Coords center = new Coords(xCenter, yCenter);
 
-        if (!game.getBoard().contains(center)) {
+        if (!board.contains(center)) {
             logger.error("Center of ally group " + center.toFriendlyString()
                     + " not within board boundaries.");
             return null;

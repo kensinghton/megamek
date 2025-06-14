@@ -52,7 +52,9 @@ import megamek.client.ui.Messages;
 import megamek.client.ui.clientGUI.GUIPreferences;
 import megamek.client.ui.clientGUI.tooltip.UnitToolTip;
 import megamek.common.*;
+import megamek.common.AmmoType.AmmoTypeEnum;
 import megamek.common.AmmoType.Munitions;
+import megamek.common.BombType.BombTypeEnum;
 import megamek.common.Building.DemolitionCharge;
 import megamek.common.actions.*;
 import megamek.common.annotations.Nullable;
@@ -661,7 +663,7 @@ public class TWGameManager extends AbstractGameManager {
             send(connId, createArtilleryPacket(player));
             send(connId, createFlarePacket());
             for (int boardId : game.getBoardIds()) {
-                send(createSpecialHexDisplayPacket(connId, boardId));
+                send(connId, createSpecialHexDisplayPacket(connId, boardId));
             }
             send(connId, new Packet(PacketCommand.PRINCESS_SETTINGS, getGame().getBotSettings()));
             send(connId, new Packet(PacketCommand.UPDATE_GROUND_OBJECTS, getGame().getGroundObjects()));
@@ -1832,12 +1834,7 @@ public class TWGameManager extends AbstractGameManager {
         comp = comp.thenComparing(Entity::getDisplayName);
         entities.sort(comp);
 
-        // turn off preformatted text for unit tool tip
-        Report r = new Report(1230, Report.PUBLIC);
-        r.add("</pre>");
-        reports.add(r);
-
-        r = new Report(7600, Report.PUBLIC);
+        Report r = new Report(7600, Report.PUBLIC);
         reports.add(r);
 
         r = new Report(1230, Report.PUBLIC);
@@ -1862,9 +1859,6 @@ public class TWGameManager extends AbstractGameManager {
             reports.add(r);
         }
 
-        // turn preformatted text back on, so that text after will display properly
-        r = new Report(1230, Report.PUBLIC);
-        r.add("<pre>");
         reports.add(r);
 
         mainPhaseReport.addAll(reports);
@@ -9839,10 +9833,12 @@ public class TWGameManager extends AbstractGameManager {
             boolean isHomingMissile = false;
             if (wh instanceof ArtilleryWeaponIndirectHomingHandler ||
                       wh instanceof ArtilleryBayWeaponIndirectHomingHandler) {
-                Mounted<?> ammoUsed = artilleryFirer.getEquipment(waa.getAmmoId());
+                AmmoMounted ammoUsed = artilleryFirer.getAmmo(waa.getAmmoId());
                 AmmoType atype = ammoUsed == null ? null : (AmmoType) ammoUsed.getType();
+                // TODO: this logic seems to be a bit off, rules need to be checked.
                 if (atype != null &&
-                          (atype.getAmmoType() == AmmoType.T_ARROW_IV || atype.getAmmoType() == BombType.B_HOMING)) {
+                          (atype.getAmmoType() == AmmoTypeEnum.ARROW_IV
+                          || ammoUsed.isHomingAmmoInHomingMode())) {
                     isHomingMissile = true;
                 }
             }
@@ -10760,7 +10756,7 @@ public class TWGameManager extends AbstractGameManager {
         for (Mounted<?> mounted : entity.getTotalWeaponList()) {
             if (mounted.isJammed() && !mounted.isDestroyed()) {
                 WeaponType wtype = (WeaponType) mounted.getType();
-                if (wtype.getAmmoType() == AmmoType.T_AC_ROTARY) {
+                if (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.AC_ROTARY) {
                     Roll diceRoll = Compute.rollD6(2);
                     r = new Report(3030);
                     r.indent();
@@ -10779,12 +10775,12 @@ public class TWGameManager extends AbstractGameManager {
                 }
                 // Unofficial option to unjam UACs, ACs, and LACs like Rotary
                 // Autocannons
-                if (((wtype.getAmmoType() == AmmoType.T_AC_ULTRA) ||
-                           (wtype.getAmmoType() == AmmoType.T_AC_ULTRA_THB) ||
-                           (wtype.getAmmoType() == AmmoType.T_AC) ||
-                           (wtype.getAmmoType() == AmmoType.T_AC_IMP) ||
-                           (wtype.getAmmoType() == AmmoType.T_PAC) ||
-                           (wtype.getAmmoType() == AmmoType.T_LAC)) &&
+                if (((wtype.getAmmoType() == AmmoType.AmmoTypeEnum.AC_ULTRA) ||
+                           (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.AC_ULTRA_THB) ||
+                           (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.AC) ||
+                           (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.AC_IMP) ||
+                           (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.PAC) ||
+                           (wtype.getAmmoType() == AmmoType.AmmoTypeEnum.LAC)) &&
                           game.getOptions().booleanOption(OptionsConstants.ADVCOMBAT_UNJAM_UAC)) {
                     Roll diceRoll = Compute.rollD6(2);
                     r = new Report(3030);
@@ -10813,7 +10809,7 @@ public class TWGameManager extends AbstractGameManager {
 
         // Get the entity's current hex.
         Coords coords = entity.getPosition();
-        Hex curHex = game.getBoard().getHex(coords);
+        Hex curHex = game.getHexOf(entity);
 
         Report r;
 
@@ -11119,7 +11115,7 @@ TargetRoll nTargetRoll,
             int tf = jungle.getTerrainFactor() - nDamage;
             int level = jungle.getLevel();
             int folEl = h.terrainLevel(Terrains.FOLIAGE_ELEV);
-            if (tf < 0) {
+            if (tf <= 0) {
                 h.removeTerrain(Terrains.JUNGLE);
                 h.removeTerrain(Terrains.FOLIAGE_ELEV);
                 h.addTerrain(new Terrain(Terrains.ROUGH, 1));
@@ -11388,7 +11384,7 @@ TargetRoll nTargetRoll,
                                          ((toHit.getMoS() / 3) >= 1);
 
         // Which building takes the damage?
-        Building bldg = game.getBoard().getBuildingAt(target.getPosition());
+        Building bldg = game.getBoard(target).getBuildingAt(target.getPosition());
 
         if (lastEntityId != paa.getEntityId()) {
             // report who is making the attacks
@@ -11686,7 +11682,7 @@ TargetRoll nTargetRoll,
                                          ((toHit.getMoS() / 3) >= 1);
 
         // Which building takes the damage?
-        Building bldg = game.getBoard().getBuildingAt(target.getPosition());
+        Building bldg = game.getBoard(target).getBuildingAt(target.getPosition());
 
         if (lastEntityId != ae.getId()) {
             // who is making the attacks
@@ -11934,7 +11930,7 @@ TargetRoll nTargetRoll,
                                          ((toHit.getMoS() / 3) >= 1);
 
         // Which building takes the damage?
-        Building bldg = game.getBoard().getBuildingAt(target.getPosition());
+        Building bldg = game.getBoard(target).getBuildingAt(target.getPosition());
 
         if (lastEntityId != ae.getId()) {
             // who is making the attacks
@@ -12141,7 +12137,7 @@ TargetRoll nTargetRoll,
         Report r;
 
         // Which building takes the damage?
-        Building bldg = game.getBoard().getBuildingAt(target.getPosition());
+        Building bldg = game.getBoard(target).getBuildingAt(target.getPosition());
 
         if (lastEntityId != ae.getId()) {
             // who is making the attacks
@@ -12831,7 +12827,7 @@ TargetRoll nTargetRoll,
         Report r;
 
         // Which building takes the damage?
-        Building bldg = game.getBoard().getBuildingAt(target.getPosition());
+        Building bldg = game.getBoard(target).getBuildingAt(target.getPosition());
 
         // restore club attack
         caa.getClub().restore();
@@ -13777,7 +13773,7 @@ TargetRoll nTargetRoll,
         Coords[] hexes = new Coords[6];
         int[] scores = new int[6];
 
-        Hex curHex = game.getBoard().getHex(ae.getPosition());
+        Hex curHex = game.getHexOf(ae);
         for (int i = 0; i < 6; i++) {
             hexes[i] = ae.getPosition().translated(i);
             scores[i] = 0;
@@ -14937,8 +14933,9 @@ TargetRoll nTargetRoll,
             return;
         }
 
-        final Hex aeHex = game.getBoard().getHex(ae.getPosition());
-        final Hex teHex = game.getBoard().getHex(daa.getTargetPos());
+        Board board = game.getBoard(ae);
+        final Hex aeHex = game.getHexOf(ae);
+        final Hex teHex = board.getHex(daa.getTargetPos());
         final Targetable target = game.getTarget(daa.getTargetType(), daa.getTargetId());
 
         if (target == null) {
@@ -14961,7 +14958,7 @@ TargetRoll nTargetRoll,
             // It's especially important to make sure it's done this way, because some units (Sylph, submarines) can
             // be at ANY elevation underwater, and VTOLs can be well above the surface.
             targetEntity = (Entity) target;
-            Hex hex = game.getBoard().getHex(targetEntity.getPosition());
+            Hex hex = board.getHex(targetEntity.getPosition());
             if (hex.containsTerrain(Terrains.WATER)) {
                 if (targetEntity.relHeight() < 0) {
                     damage = (int) Math.ceil(damage * 0.5f);
@@ -15142,7 +15139,7 @@ TargetRoll nTargetRoll,
         if ((target.getTargetType() == Targetable.TYPE_BUILDING) ||
                   (target.getTargetType() == Targetable.TYPE_FUEL_TANK)) {
             // Which building takes the damage?
-            Building bldg = game.getBoard().getBuildingAt(daa.getTargetPos());
+            Building bldg = board.getBuildingAt(daa.getTargetPos());
 
             // The building takes the full brunt of the attack.
             Vector<Report> buildingReport = damageBuilding(bldg, damage, target.getPosition());
@@ -16394,6 +16391,7 @@ TargetRoll nTargetRoll,
         r.add(reasons.toString());
         vPhaseReport.add(r);
         r = new Report(2285);
+        r.indent();
         r.subject = entity.getId();
         r.add(base);
         vPhaseReport.add(r);
@@ -16614,6 +16612,7 @@ TargetRoll nTargetRoll,
                 r.add(reasons.toString());
                 vReport.add(r);
                 r = new Report(2285);
+                r.indent();
                 r.subject = e.getId();
                 r.add(target);
                 vReport.add(r);
@@ -19697,7 +19696,7 @@ TargetRoll nTargetRoll,
                             break;
                         }
                         // does it use Ammo?
-                        if (wtype.getAmmoType() != AmmoType.T_NA) {
+                        if (wtype.getAmmoType() != AmmoType.AmmoTypeEnum.NA) {
                             Mounted<?> m = equipmentHit.getLinked();
                             int ammoroll = Compute.d6(2);
                             if (ammoroll >= 10) {
@@ -21424,7 +21423,9 @@ TargetRoll nTargetRoll,
             boolean reactiveArmorCrit = false;
             if ((slot != null) && (slot.getType() == CriticalSlot.TYPE_EQUIPMENT) && (slot.getMount() != null)) {
                 Mounted<?> eq = slot.getMount();
-                if (eq.getType().hasFlag(MiscType.F_REACTIVE) && (en.getArmor(loc) > 0)) {
+                if ((eq.getType() instanceof MiscType miscType) &&
+                      miscType.hasFlag(MiscType.F_REACTIVE) &&
+                      (en.getArmor(loc) > 0)) {
                     reactiveArmorCrit = true;
                 }
             }
@@ -22363,10 +22364,10 @@ TargetRoll nTargetRoll,
 
         // Inferno ammo causes heat buildup as well as the damage
         if ((mounted.getType() instanceof AmmoType) &&
-                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_SRM) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_SRM_IMP) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_IATM) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_MML)) &&
+                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.SRM) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.SRM_IMP) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.IATM) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.MML)) &&
                   (((AmmoType) mounted.getType()).getMunitionType().contains(Munitions.M_INFERNO) &&
                          (mounted.getHittableShotsLeft() > 0))) {
             en.heatBuildup += Math.min(mounted.getExplosionDamage(), 30);
@@ -22374,7 +22375,7 @@ TargetRoll nTargetRoll,
 
         // Inferno bombs in LAM bomb bays
         if ((mounted.getType() instanceof BombType) &&
-                  (((BombType) mounted.getType()).getBombType() == BombType.B_INFERNO)) {
+                  (((BombType) mounted.getType()).getBombType() == BombTypeEnum.INFERNO)) {
             en.heatBuildup += Math.min(mounted.getExplosionDamage(), 30);
         }
 
@@ -22383,18 +22384,18 @@ TargetRoll nTargetRoll,
 
         // Smoke ammo halves damage
         if ((mounted.getType() instanceof AmmoType) &&
-                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_SRM) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_SRM_IMP) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_LRM) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_LRM_IMP)) &&
+                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.SRM) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.SRM_IMP) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.LRM) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.LRM_IMP)) &&
                   (((AmmoType) mounted.getType()).getMunitionType().contains(Munitions.M_SMOKE_WARHEAD) &&
                          (mounted.getHittableShotsLeft() > 0))) {
             damage = ((mounted.getExplosionDamage()) / 2);
         }
         // coolant explodes for 2 damage and reduces heat by 3
         if ((mounted.getType() instanceof AmmoType) &&
-                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_VEHICLE_FLAMER) ||
-                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.T_HEAVY_FLAMER)) &&
+                  ((((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.VEHICLE_FLAMER) ||
+                         (((AmmoType) mounted.getType()).getAmmoType() == AmmoType.AmmoTypeEnum.HEAVY_FLAMER)) &&
                   (((AmmoType) mounted.getType()).getMunitionType().contains(Munitions.M_COOLANT) &&
                          (mounted.getHittableShotsLeft() > 0))) {
             damage = 2;
@@ -22550,9 +22551,9 @@ TargetRoll nTargetRoll,
                     continue;
                 }
                 // coolant pods and flamer coolant ammo don't explode from heat
-                if ((atype.getAmmoType() == AmmoType.T_COOLANT_POD) ||
-                          (((atype.getAmmoType() == AmmoType.T_VEHICLE_FLAMER) ||
-                                  (atype.getAmmoType() == AmmoType.T_HEAVY_FLAMER)) &&
+                if ((atype.getAmmoType() == AmmoType.AmmoTypeEnum.COOLANT_POD) ||
+                          (((atype.getAmmoType() == AmmoType.AmmoTypeEnum.VEHICLE_FLAMER) ||
+                                  (atype.getAmmoType() == AmmoType.AmmoTypeEnum.HEAVY_FLAMER)) &&
                                  (atype.getMunitionType().contains(Munitions.M_COOLANT)))) {
                     continue;
                 }
@@ -24704,7 +24705,7 @@ TargetRoll nTargetRoll,
             logger.error("Entity " + e.getDisplayName() + " does not have weapon #" + weaponId);
             return;
         }
-        if (mWeap.getType().getAmmoType() == AmmoType.T_NA) {
+        if (mWeap.getType().getAmmoType() == AmmoType.AmmoTypeEnum.NA) {
             logger.error("Item #" +
                                weaponId +
                                " of entity " +
@@ -25357,7 +25358,7 @@ TargetRoll nTargetRoll,
             if ((equip.getType() instanceof AmmoType) ||
                       (equip.getLinked() != null &&
                              equip.getLinked().getType() instanceof BombType &&
-                             ((BombType) equip.getLinked().getType()).getBombType() == BombType.B_INFERNO)) {
+                             ((BombType) equip.getLinked().getType()).getBombType() == BombTypeEnum.INFERNO)) {
                 entity.heat += Math.min(equip.getExplosionDamage(), 30);
             }
             vDesc.addAll(explodeEquipment(entity, boomloc, boomslot));
@@ -28379,10 +28380,10 @@ TargetRoll nTargetRoll,
         // Values used later
         boolean isFuelAirBomb = ammo != null &&
                                       (ammo.getMunitionType().contains(Munitions.M_FAE) ||
-                                             (BombType.getBombTypeFromInternalName(ammo.getInternalName()) ==
-                                                    BombType.B_FAE_SMALL ||
-                                                    BombType.getBombTypeFromInternalName(ammo.getInternalName()) ==
-                                                          BombType.B_FAE_LARGE));
+                                             (BombTypeEnum.fromInternalName(ammo.getInternalName()) ==
+                                                    BombTypeEnum.FAE_SMALL ||
+                                                    BombTypeEnum.fromInternalName(ammo.getInternalName()) ==
+                                                          BombTypeEnum.FAE_LARGE));
         Building bldg = game.getBuildingAt(coords, boardId).orElse(null);
         Hex hex = game.getHex(coords, boardId);
         int effectiveLevel = (hex != null) ? hex.getLevel() : 0;
@@ -28618,7 +28619,7 @@ TargetRoll nTargetRoll,
         return alreadyHit;
     }
 
-    public Vector<Integer> deliverBombDamage(HexTarget targetHex, int type, int subjectId, Entity killer,
+    public Vector<Integer> deliverBombDamage(HexTarget targetHex, BombTypeEnum type, int subjectId, Entity killer,
           Vector<Report> vPhaseReport) {
         Coords center = targetHex.getPosition();
         Vector<Integer> alreadyHit = new Vector<>();
@@ -28650,11 +28651,11 @@ TargetRoll nTargetRoll,
             }
         }
 
-        if (type == BombType.B_FAE_SMALL || type == BombType.B_FAE_LARGE) {
+        if (type == BombTypeEnum.FAE_SMALL || type == BombTypeEnum.FAE_LARGE) {
             // pass FAE bombs with the special handler
             alreadyHit = AreaEffectHelper.processFuelAirDamage(center,
                   targetLevel,
-                  (BombType) EquipmentType.get(BombType.getBombInternalName(type)),
+                  (BombType) EquipmentType.get(type.getInternalName()),
                   killer,
                   vPhaseReport,
                   this);

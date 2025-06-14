@@ -16,7 +16,6 @@ package megamek.common;
 import java.io.Serial;
 import java.text.NumberFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -174,8 +173,8 @@ public abstract class Aero extends Entity implements IAero, IBomber {
 
     protected int maxIntBombPoints = 0;
     protected int maxExtBombPoints = 0;
-    protected int[] intBombChoices = new int[BombType.B_NUM];
-    protected int[] extBombChoices = new int[BombType.B_NUM];
+    protected BombLoadout intBombChoices = new BombLoadout();
+    protected BombLoadout extBombChoices = new BombLoadout();
 
     protected int usedInternalBombs = 0;
 
@@ -574,33 +573,29 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     }
 
     @Override
-    public int[] getIntBombChoices() {
-        return intBombChoices.clone();
+    public BombLoadout getIntBombChoices() {
+        return new BombLoadout(intBombChoices);
     }
 
     @Override
-    public void setIntBombChoices(int[] bc) {
-        if (bc.length == intBombChoices.length) {
-            intBombChoices = bc.clone();
-        }
+    public void setIntBombChoices(BombLoadout bc) {
+        intBombChoices = new BombLoadout(bc);
     }
 
     @Override
-    public int[] getExtBombChoices() {
-        return extBombChoices.clone();
+    public BombLoadout getExtBombChoices() {
+        return new BombLoadout(extBombChoices);
     }
 
     @Override
-    public void setExtBombChoices(int[] bc) {
-        if (bc.length == extBombChoices.length) {
-            extBombChoices = bc.clone();
-        }
+    public void setExtBombChoices(BombLoadout bc) {
+        extBombChoices = new BombLoadout(bc);
     }
 
     @Override
     public void clearBombChoices() {
-        Arrays.fill(intBombChoices, 0);
-        Arrays.fill(extBombChoices, 0);
+        intBombChoices.clear();
+        extBombChoices.clear();
     }
 
     @Override
@@ -1147,11 +1142,6 @@ public abstract class Aero extends Entity implements IAero, IBomber {
         };
     }
 
-    @Override
-    public boolean hasRearArmor(int loc) {
-        return false;
-    }
-
     /**
      * Returns the Compute.ARC that the weapon fires into.
      */
@@ -1407,14 +1397,6 @@ public abstract class Aero extends Entity implements IAero, IBomber {
     }
 
     /**
-     * Gets the location that is destroyed recursively
-     */
-    @Override
-    public int getDependentLocation(int loc) {
-        return LOC_NONE;
-    }
-
-    /**
      * Not used directly but is overwritten in 5 other classes.
      *
      * @return BV Type Modifier.
@@ -1598,9 +1580,9 @@ public abstract class Aero extends Entity implements IAero, IBomber {
         return capacity;
     }
 
-    // If the aero is in the water, it is dead so no worries
     @Override
     public int getHeatCapacityWithWater() {
+        // If the aero is in the water, it is dead so no worries
         return getHeatCapacity(false);
     }
 
@@ -1737,16 +1719,6 @@ public abstract class Aero extends Entity implements IAero, IBomber {
             }
         }
         return Math.max(0, caseLocations.size() - explicit);
-    }
-
-    @Override
-    public boolean doomedInExtremeTemp() {
-        return false;
-    }
-
-    @Override
-    public boolean doomedInVacuum() {
-        return false;
     }
 
     @Override

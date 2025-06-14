@@ -1,20 +1,34 @@
 /*
- * Copyright (c) 2025 - The MegaMek Team. All Rights Reserved.
+ * Copyright (C) 2025 The MegaMek Team. All Rights Reserved.
  *
- *  This file is part of MegaMek.
+ * This file is part of MegaMek.
  *
- *  MekHQ is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ * MegaMek is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License (GPL),
+ * version 3 or (at your option) any later version,
+ * as published by the Free Software Foundation.
  *
- *  MekHQ is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
+ * MegaMek is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty
+ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with MekHQ. If not, see <http://www.gnu.org/licenses/>.
+ * A copy of the GPL should have been included with this project;
+ * if not, see <https://www.gnu.org/licenses/>.
+ *
+ * NOTICE: The MegaMek organization is a non-profit group of volunteers
+ * creating free software for the BattleTech community.
+ *
+ * MechWarrior, BattleMech, `Mech and AeroTech are registered trademarks
+ * of The Topps Company, Inc. All Rights Reserved.
+ *
+ * Catalyst Game Labs and the Catalyst Game Labs logo are trademarks of
+ * InMediaRes Productions, LLC.
+ *
+ * MechWarrior Copyright Microsoft Corporation. MegaMek was created under
+ * Microsoft's "Game Content Usage Rules"
+ * <https://www.xbox.com/en-US/developers/rules> and it is not endorsed by or
+ * affiliated with Microsoft.
  */
 package megamek.utilities;
 
@@ -38,7 +52,7 @@ import megamek.logging.MMLogger;
  * @author Luana Coppio
  */
 public class GifWriterThread extends Thread {
-    private static final MMLogger logger = MMLogger.create(GifWriter.class);
+    private static final MMLogger LOGGER = MMLogger.create(GifWriter.class);
 
     private record Frame(BufferedImage image, long duration) {
     }
@@ -103,7 +117,7 @@ public class GifWriterThread extends Thread {
                 try {
                     saveGifNag();
                 } catch (Exception e) {
-                    logger.error(e, "Error deleting gif or opening JOptionPane");
+                    LOGGER.error(e, "Error deleting gif or opening JOptionPane");
                 }
             }
             isLive = false;
@@ -120,7 +134,6 @@ public class GifWriterThread extends Thread {
                   JOptionPane.INFORMATION_MESSAGE);
             if (response == JOptionPane.YES_OPTION) {
                 saveGif();
-                return;
             }
         }
         deleteGif();
@@ -129,9 +142,8 @@ public class GifWriterThread extends Thread {
     private void saveGif() {
         SaveDialogResult result = getSaveDialog();
         if ((result.returnVal() != JFileChooser.APPROVE_OPTION) || (result.saveDialog().getSelectedFile() == null)) {
-            // without a file there is no saving for the file, which them means we can't save the gif and instead we
-            // delete it
-            deleteGif();
+            // without a file there is no saving for the file, which them means we can't save the gif
+            LOGGER.warn("No file selected for saving GIF, skipping save operation.");
             return;
         }
 
@@ -141,25 +153,26 @@ public class GifWriterThread extends Thread {
             if (!gifFile.getName().toLowerCase().endsWith(CG_FILE_EXTENSION_GIF)) {
                 try {
                     gifFile = new File(gifFile.getCanonicalPath() + CG_FILE_EXTENSION_GIF);
-                } catch (Exception ignored) {
-                    // without a file there is no saving for the file, which them means we can't save the gif and
-                    // instead we delete it
-                    deleteGif();
+                } catch (Exception ex) {
+                    // without a file there is no saving for the file, which them means we can't save the gif
+                    LOGGER.errorDialog(
+                          ex, "Unable to get canonical path for file {}", "Error when trying to save GIF",
+                          gifFile);
                     return;
                 }
             }
             File finalGifFile = gifFile;
             try {
                 if (gifWriter.getOutputFile().renameTo(finalGifFile)) {
-                    logger.info("Game summary GIF saved to {}", finalGifFile);
+                    LOGGER.info("Game summary GIF saved to {}", finalGifFile);
                 } else {
-                    logger.errorDialog("Unable to save GIF in destination",
+                    LOGGER.errorDialog("Unable to save GIF in destination",
                           "Unable to save file {} at {}",
                           gifWriter.getOutputFile(),
                           finalGifFile);
                 }
             } catch (Exception ex) {
-                logger.errorDialog(ex,
+                LOGGER.errorDialog(ex,
                       "Unable to save file {} at {}",
                       "Unable to save GIF in destination",
                       gifWriter.getOutputFile(),
@@ -189,9 +202,9 @@ public class GifWriterThread extends Thread {
 
     private void deleteGif() {
         if (gifWriter.delete()) {
-            logger.info("Deleted temporary game summary GIF {}", gifWriter.getOutputFile());
+            LOGGER.info("Deleted temporary game summary GIF {}", gifWriter.getOutputFile());
         } else {
-            logger.error("Failed to delete temporary game summary GIF {}", gifWriter.getOutputFile());
+            LOGGER.error("Failed to delete temporary game summary GIF {}", gifWriter.getOutputFile());
         }
     }
 

@@ -55,6 +55,7 @@ import megamek.client.ui.clientGUI.IClientGUI;
 import megamek.client.ui.clientGUI.IHasBoardView;
 import megamek.client.ui.dialogs.unitDisplay.IHasUnitDisplay;
 import megamek.client.ui.util.BASE64ToolKit;
+import megamek.client.ui.util.KeyCommandBind;
 import megamek.client.ui.util.UIUtil;
 import megamek.common.Entity;
 import megamek.common.Player;
@@ -78,6 +79,7 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
     private JButton butEntitySearchDown;
     private JButton butQuickSearchUp;
     private JButton butQuickSearchDown;
+    private JButton butQuickFilter;
     private JComboBox<String> comboPlayer = new JComboBox<>();
     private JComboBox<String> comboEntity = new JComboBox<>();
     private JComboBox<String> comboQuick = new JComboBox<>();
@@ -85,6 +87,8 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
     private Client currentClient;
     private static final GUIPreferences GUIP = GUIPreferences.getInstance();
     private static final ClientPreferences CP = PreferenceManager.getClientPreferences();
+
+    private boolean filterEnabled = false;
 
     private static final int MRD_MAXNAMELENGHT = 60;
 
@@ -114,8 +118,86 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
         butEntitySearchDown.addActionListener(this);
         butQuickSearchUp = new JButton(Messages.getString("MiniReportDisplay.ArrowUp"));
         butQuickSearchUp.addActionListener(this);
+        butQuickSearchUp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+              .put(KeyCommandBind.keyStroke(KeyCommandBind.REPORT_KEY_PREV), "MiniReportDisplay.ArrowUp");
+        butQuickSearchUp.getActionMap().put("MiniReportDisplay.ArrowUp", new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                butQuickSearchUp.doClick();
+            }
+        });
+        butQuickSearchUp.setToolTipText(Messages.getString("MiniReportDisplay.tooltip.ArrowUp")
+              + ": "
+              + KeyCommandBind.getDesc(KeyCommandBind.REPORT_KEY_PREV));
+
         butQuickSearchDown = new JButton(Messages.getString("MiniReportDisplay.ArrowDown"));
         butQuickSearchDown.addActionListener(this);
+        butQuickSearchDown.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+              .put(KeyCommandBind.keyStroke(KeyCommandBind.REPORT_KEY_NEXT), "MiniReportDisplay.ArrowDown");
+        butQuickSearchDown.getActionMap().put("MiniReportDisplay.ArrowDown", new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                butQuickSearchDown.doClick();
+            }
+        });
+        butQuickSearchDown.setToolTipText(Messages.getString("MiniReportDisplay.tooltip.ArrowDown")
+              + ": "
+              + KeyCommandBind.getDesc(KeyCommandBind.REPORT_KEY_NEXT));
+
+        butQuickFilter = new JButton(Messages.getString("MiniReportDisplay.KeywordFilter"));
+        butQuickFilter.addActionListener(this);
+        butQuickFilter.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+              .put(KeyCommandBind.keyStroke(KeyCommandBind.REPORT_KEY_FILTER), "MiniReportDisplay.KeywordFilter");
+        butQuickFilter.getActionMap().put("MiniReportDisplay.KeywordFilter", new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                butQuickFilter.doClick();
+            }
+        });
+        butQuickFilter.setToolTipText(Messages.getString("MiniReportDisplay.tooltip.KeywordFilter")
+              + ": "
+              + KeyCommandBind.getDesc(KeyCommandBind.REPORT_KEY_FILTER));
+
+        comboQuick.addActionListener(this);
+        comboQuick.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+              .put(KeyCommandBind.keyStroke(KeyCommandBind.REPORT_KEY_SELNEXT), "MiniReportDisplay.comboQuickNext");
+        comboQuick.getActionMap().put("MiniReportDisplay.comboQuickNext", new AbstractAction() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (comboQuick.getItemCount() > 1) {
+                    comboQuick.setSelectedIndex((comboQuick.getSelectedIndex() + 1) % comboQuick.getItemCount());
+                }
+            }
+        });
+        comboQuick.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+              .put(KeyCommandBind.keyStroke(KeyCommandBind.REPORT_KEY_SELPREV), "MiniReportDisplay.comboQuickPrev");
+        comboQuick.getActionMap().put("MiniReportDisplay.comboQuickPrev", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (comboQuick.getItemCount() > 1) {
+                    int i = (comboQuick.getSelectedIndex() - 1) % comboQuick.getItemCount();
+                    if (i < 0) {
+                        i = comboQuick.getItemCount() - 1;
+                    }
+                    comboQuick.setSelectedIndex(i);
+                }
+            }
+        });
+        comboQuick.setToolTipText("<html>"
+              + Messages.getString("MiniReportDisplay.tooltip.ComboQuickNext")
+              + ": "
+              + KeyCommandBind.getDesc(KeyCommandBind.REPORT_KEY_SELNEXT)
+              + "<br>"
+              + Messages.getString("MiniReportDisplay.tooltip.ComboQuickPrev")
+              + ": "
+              + KeyCommandBind.getDesc(KeyCommandBind.REPORT_KEY_SELPREV)
+              + "<br>"
+              + Messages.getString("MiniReportDisplay.tooltip.ComboQuickInfo")
+              + "</html>");
 
         setLayout(new BorderLayout());
 
@@ -131,6 +213,7 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
         p.add(comboQuick);
         p.add(butQuickSearchUp);
         p.add(butQuickSearchDown);
+        p.add(butQuickFilter);
         p.add(butSwitchLocation);
 
         JScrollPane sp = new JScrollPane(p);
@@ -143,6 +226,48 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
         add(panelMain, BorderLayout.CENTER);
 
         doLayout();
+    }
+
+    private void filterReport(String selectedKeyword) {
+        String filterResult = "";
+        String[] keywords = selectedKeyword.split(" ");
+        String[] htmlLines = currentClient.phaseReport.split("<br>");
+        for (int i = 0; i < htmlLines.length; i++) {
+            String htmlLine = htmlLines[i];
+            for (int j = 0; j < keywords.length; j++) {
+                String word = keywords[j];
+                if (htmlLine.replaceAll("<[^>]*>", "").toUpperCase().contains(word.toUpperCase())) {
+                    if (i > 0 && htmlLines[i - 1].contains("<img")) {
+                        filterResult += htmlLines[i - 1] + "<br>"; // get image from line above
+                    }
+                    filterResult += htmlLine + "<br>";
+                    if (i < htmlLines.length - 1 && htmlLines[i + 1].contains("</div>")) {
+                        filterResult += "</div>"; // close div tag
+                    }
+                    break;
+                }
+            }
+        }
+
+        filterReportOutput(filterResult);
+
+        butQuickFilter.setText("Filter*");
+        filterEnabled = true;
+
+    }
+
+    private void filterReportOutput(String text) {
+        if (tabs.getTabCount() > 0) {
+            int phaseTab = tabs.getTabCount() - 1;
+            tabs.removeTabAt(phaseTab);
+            tabs.add(Messages.getString("MiniReportDisplay.Phase"), loadHtmlScrollPane(text));
+            tabs.setSelectedIndex(phaseTab);
+        }
+    }
+
+    private void filterButtonReset() {
+        butQuickFilter.setText("Filter");
+        filterEnabled = false;
     }
 
     private void searchTextPane(String searchPattern, Boolean searchDown) {
@@ -300,6 +425,16 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
             searchPattern(comboQuick, true);
         } else if (ae.getSource().equals(butQuickSearchUp)) {
             searchPattern(comboQuick, false);
+        } else if (ae.getSource().equals(butQuickFilter)) {
+            if (!filterEnabled) {
+                filterReport(comboQuick.getItemAt(comboQuick.getSelectedIndex()));
+            } else {
+                filterReportOutput(currentClient.phaseReport);
+                filterButtonReset();
+            }
+
+        } else if (ae.getSource().equals(comboQuick)) {
+            filterButtonReset();
         }
     }
 
@@ -313,15 +448,19 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
     }
 
     private JScrollPane loadHtmlScrollPane(String t) {
+
         JTextPane ta = new JTextPane();
         Report.setupStylesheet(ta);
         ta.addHyperlinkListener(this);
         BASE64ToolKit toolKit = new BASE64ToolKit();
         ta.setEditorKit(toolKit);
-        ta.setText("<pre>" + t + "</pre>");
+
+        ta.setText("<div class='report'>" + t + "</div>");
+
         ta.setEditable(false);
         ta.setOpaque(false);
         ta.setCaretPosition(0);
+        filterButtonReset();
         return new JScrollPane(ta);
     }
 
@@ -407,9 +546,8 @@ public class MiniReportDisplayPanel extends JPanel implements ActionListener, Hy
                     setVisible(false);
                     break;
                 default:
-                    if ((!e.getNewPhase().equals((e.getOldPhase()))) &&
-                              ((e.getNewPhase().isReport()) ||
-                                     ((e.getNewPhase().isOnMap()) && (tabs.getTabCount() == 0)))) {
+                    if ((!e.getNewPhase().equals((e.getOldPhase()))) && ((e.getNewPhase().isReport())
+                          || ((e.getNewPhase().isOnMap()) && (tabs.getTabCount() == 0)))) {
                         addReportPages(e.getNewPhase());
                         updatePlayerChoice();
                         updateEntityChoice();

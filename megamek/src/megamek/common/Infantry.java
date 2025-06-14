@@ -714,16 +714,6 @@ public class Infantry extends Entity {
     }
 
     @Override
-    public int getDependentLocation(int loc) {
-        return Entity.LOC_NONE;
-    }
-
-    @Override
-    public boolean hasRearArmor(int loc) {
-        return false;
-    }
-
-    @Override
     public int getInternal(int loc) {
         if (!isConventionalInfantry()) {
             return super.getInternal(loc);
@@ -737,6 +727,14 @@ public class Infantry extends Entity {
     @Override
     public int getOInternal(int loc) {
         return isConventionalInfantry() ? originalTrooperCount : super.getOInternal(loc);
+    }
+
+    /**
+     * @return The full original strength of this infantry unit; for conventional infantry, this is the original
+     * trooper count, for BA the original squad size.
+     */
+    public int getOriginalTrooperCount() {
+        return originalTrooperCount;
     }
 
     @Override
@@ -797,21 +795,6 @@ public class Infantry extends Entity {
     @Override
     public boolean isSecondaryArcWeapon(int wn) {
         return isFieldWeapon((getEquipment(wn))) && !hasActiveFieldArtillery();
-    }
-
-    @Override
-    public int getHeatCapacity(boolean radicalHeatSinks) {
-        return DOES_NOT_TRACK_HEAT;
-    }
-
-    @Override
-    public int getHeatCapacityWithWater() {
-        return getHeatCapacity();
-    }
-
-    @Override
-    public int getEngineCritHeat() {
-        return 0;
     }
 
     @Override
@@ -1232,9 +1215,7 @@ public class Infantry extends Entity {
     }
 
     public boolean isMechanized() {
-        return (getMovementMode().isTrackedWheeledOrHover()) ||
-                     (getMovementMode().isSubmarine()) ||
-                     (getMovementMode().isVTOL());
+        return movementMode.isTrackedWheeledOrHover() || movementMode.isVTOL() || movementMode.isSubmarine();
     }
 
     public boolean isXCT() {
@@ -1769,7 +1750,7 @@ public class Infantry extends Entity {
      * @return True if this infantry has a field artillery weapon that is not destroyed.
      */
     public boolean hasActiveFieldArtillery() {
-        return activeFieldWeapons().stream().anyMatch(gun -> gun.getType().hasFlag(WeaponType.F_ARTILLERY));
+        return activeFieldWeapons().stream().anyMatch(TestInfantry::isFieldArtilleryWeapon);
     }
 
     /**

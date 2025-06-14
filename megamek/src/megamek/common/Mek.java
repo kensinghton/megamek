@@ -1646,10 +1646,6 @@ public abstract class Mek extends Entity {
         return Math.max(capacity, 0);
     }
 
-    /**
-     * Returns the about of heat that the entity can sink each turn, factoring
-     * for water.
-     */
     @Override
     public int getHeatCapacityWithWater() {
         if (hasLaserHeatSinks()) {
@@ -1810,11 +1806,6 @@ public abstract class Mek extends Entity {
         return rotate >= 3 ? (getFacing() + 5) % 6 : (getFacing() + 1) % 6;
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see megamek.common.Entity#hasRearArmor(int)
-     */
     @Override
     public boolean hasRearArmor(int loc) {
         return (loc == LOC_CT) || (loc == LOC_RT) || (loc == LOC_LT);
@@ -1931,23 +1922,12 @@ public abstract class Mek extends Entity {
             return Compute.ARC_REAR;
         }
         // front mounted
-        switch (mounted.getLocation()) {
-            case LOC_HEAD:
-            case LOC_CT:
-            case LOC_RT:
-            case LOC_LT:
-            case LOC_RLEG:
-            case LOC_LLEG:
-                return Compute.ARC_FORWARD;
-            case LOC_RARM:
-                return getArmsFlipped() ? Compute.ARC_REAR
-                        : Compute.ARC_RIGHTARM;
-            case LOC_LARM:
-                return getArmsFlipped() ? Compute.ARC_REAR
-                        : Compute.ARC_LEFTARM;
-            default:
-                return Compute.ARC_360;
-        }
+        return switch (mounted.getLocation()) {
+            case LOC_HEAD, LOC_CT, LOC_RT, LOC_LT, LOC_RLEG, LOC_LLEG -> Compute.ARC_FORWARD;
+            case LOC_RARM -> getArmsFlipped() ? Compute.ARC_REAR : Compute.ARC_RIGHTARM;
+            case LOC_LARM -> getArmsFlipped() ? Compute.ARC_REAR : Compute.ARC_LEFTARM;
+            default -> Compute.ARC_360;
+        };
     }
 
     /**
@@ -2587,25 +2567,13 @@ public abstract class Mek extends Entity {
         }
     }
 
-    /**
-     * Gets the location that is destroyed recursively
-     */
     @Override
     public int getDependentLocation(int loc) {
-        switch (loc) {
-            case LOC_RT:
-                return LOC_RARM;
-            case LOC_LT:
-                return LOC_LARM;
-            case LOC_LLEG:
-            case LOC_LARM:
-            case LOC_RLEG:
-            case LOC_RARM:
-            case LOC_HEAD:
-            case LOC_CT:
-            default:
-                return LOC_NONE;
-        }
+        return switch (loc) {
+            case LOC_RT -> LOC_RARM;
+            case LOC_LT -> LOC_LARM;
+            default -> LOC_NONE;
+        };
     }
 
     /**
@@ -3175,7 +3143,7 @@ public abstract class Mek extends Entity {
     @Override
     protected void addSystemTechAdvancement(CompositeTechLevel ctl) {
         super.addSystemTechAdvancement(ctl);
-        // battleMeks with non-fusion engines are experimental
+        // Meks with non-fusion engines are experimental
         if (hasEngine() && !isIndustrial() && !getEngine().isFusion()) {
             ctl.addComponent(new TechAdvancement().setStaticTechLevel(SimpleTechLevel.EXPERIMENTAL));
         }
@@ -3933,16 +3901,6 @@ public abstract class Mek extends Entity {
             return ((cover & LosEffects.COVER_RIGHT) != 0)
                     && ((location == Mek.LOC_LARM) || (location == Mek.LOC_LT) || (location == Mek.LOC_LLEG));
         }
-    }
-
-    @Override
-    public boolean doomedInExtremeTemp() {
-        return false;
-    }
-
-    @Override
-    public boolean doomedInVacuum() {
-        return false;
     }
 
     @Override
@@ -5826,14 +5784,9 @@ public abstract class Mek extends Entity {
 
     @Override
     public int getEngineHits() {
-        int engineHits = 0;
-        engineHits += getHitCriticals(CriticalSlot.TYPE_SYSTEM,
-                Mek.SYSTEM_ENGINE, Mek.LOC_CT);
-        engineHits += getHitCriticals(CriticalSlot.TYPE_SYSTEM,
-                Mek.SYSTEM_ENGINE, Mek.LOC_RT);
-        engineHits += getHitCriticals(CriticalSlot.TYPE_SYSTEM,
-                Mek.SYSTEM_ENGINE, Mek.LOC_LT);
-        return engineHits;
+        return getHitCriticals(CriticalSlot.TYPE_SYSTEM, Mek.SYSTEM_ENGINE, Mek.LOC_CT)
+              + getHitCriticals(CriticalSlot.TYPE_SYSTEM, Mek.SYSTEM_ENGINE, Mek.LOC_RT)
+              + getHitCriticals(CriticalSlot.TYPE_SYSTEM, Mek.SYSTEM_ENGINE, Mek.LOC_LT);
     }
 
     public int getGyroHits() {

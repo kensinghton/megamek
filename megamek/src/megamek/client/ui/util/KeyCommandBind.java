@@ -20,12 +20,12 @@
  */
 package megamek.client.ui.util;
 
-import static java.awt.event.KeyEvent.*;
-
+import javax.swing.KeyStroke;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import javax.swing.KeyStroke;
+
+import static java.awt.event.KeyEvent.*;
 
 /**
  * This enum is a collection of commands that can be bound to a particular key.
@@ -103,6 +103,11 @@ public enum KeyCommandBind {
     NEXT_MODE("nextMode", VK_KP_UP),
     PAUSE("pause", VK_P, CTRL_DOWN_MASK | SHIFT_DOWN_MASK),
     UNPAUSE("unpause", VK_P, CTRL_DOWN_MASK | ALT_DOWN_MASK),
+    REPORT_KEY_NEXT("reportKeyNext", VK_N),
+    REPORT_KEY_PREV("reportKeyPrev", VK_N, SHIFT_DOWN_MASK),
+    REPORT_KEY_SELNEXT("reportKeySelNext", VK_N, CTRL_DOWN_MASK),
+    REPORT_KEY_SELPREV("reportKeySelPrev", VK_N, CTRL_DOWN_MASK | SHIFT_DOWN_MASK),
+    REPORT_KEY_FILTER("reportKeyFilter", VK_F, SHIFT_DOWN_MASK),
 
     // --------- The following binds are used by the CommonMenuBar:
     // Toggles isometric view on/off
@@ -124,6 +129,7 @@ public enum KeyCommandBind {
     ROUND_REPORT(true, "roundReport", VK_R, CTRL_DOWN_MASK),
     ZOOM_IN(true, "zoomIn", VK_ADD),
     ZOOM_OUT(true, "zoomOut", VK_SUBTRACT),
+    ZOOM_OVERVIEW_TOGGLE(true, "zoomOverviewToggle", VK_Z),
     QUICK_LOAD(true, "quickLoad", VK_L, CTRL_DOWN_MASK | SHIFT_DOWN_MASK),
     QUICK_SAVE(true, "quickSave", VK_S, CTRL_DOWN_MASK | SHIFT_DOWN_MASK),
     LOCAL_LOAD(true, "localLoad", VK_L, CTRL_DOWN_MASK),
@@ -209,10 +215,10 @@ public enum KeyCommandBind {
      */
     public static List<KeyCommandBind> getBindByKey(int keycode, int modifiers) {
         return Stream.of(values())
-                     .filter(bind -> !bind.isMenuBar)
-                     .filter(bind -> bind.key == keycode)
-                     .filter(bind -> bind.modifiers == modifiers)
-                     .collect(Collectors.toList());
+              .filter(bind -> !bind.isMenuBar)
+              .filter(bind -> bind.key == keycode)
+              .filter(bind -> bind.modifiers == modifiers)
+              .collect(Collectors.toList());
     }
 
     /** Returns the bind identified by the given cmd or null if there is no such bind. */

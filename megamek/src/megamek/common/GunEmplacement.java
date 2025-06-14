@@ -37,7 +37,7 @@ public class GunEmplacement extends Tank {
 
     public static final String[] HIT_LOCATION_NAMES = { "guns" };
 
-    private static final int[] CRITICAL_SLOTS = new int[] { 0 };
+    private static final int[] CRITICAL_SLOTS = new int[] { 100 };
     private static final String[] LOCATION_ABBRS = { "GUN" };
     private static final String[] LOCATION_NAMES = { "GUNS" };
 
@@ -194,13 +194,8 @@ public class GunEmplacement extends Tank {
     }
 
     @Override
-    public int getHeatCapacity() {
-        return DOES_NOT_TRACK_HEAT;
-    }
-
-    @Override
-    public int getHeatCapacityWithWater() {
-        return getHeatCapacity();
+    public int getTotalSlots() {
+        return CRITICAL_SLOTS[LOC_GUNS];
     }
 
     @Override

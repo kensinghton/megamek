@@ -36,6 +36,8 @@ import megamek.client.Client;
 import megamek.client.bot.princess.CardinalEdge;
 import megamek.client.ui.clientGUI.ClientGUI;
 import megamek.common.*;
+import megamek.common.AmmoType.AmmoTypeEnum;
+import megamek.common.AmmoType.Munitions;
 import megamek.common.actions.EntityAction;
 import megamek.common.actions.WeaponAttackAction;
 import megamek.common.annotations.Nullable;
@@ -303,7 +305,7 @@ public abstract class BotClient extends Client {
                                                         currentEntity.getId(),
                                                         transport.getPosition(),
                                                         currentEntity.climbMode());
-                boolean unloadFatal = currentEntity.isBoardProhibited(getGame().getBoard()) ||
+                boolean unloadFatal = currentEntity.isBoardProhibited(getGame().getBoard(transport)) ||
                                             currentEntity.isLocationProhibited(transport.getPosition()) ||
                                             currentEntity.isLocationDeadly(transport.getPosition());
 
@@ -605,19 +607,24 @@ public abstract class BotClient extends Client {
         }
     }
 
-    public double getMassOfAllInBuilding(final Game game, final Coords coords) {
+    /**
+     * @return The total weight of all units in or on the building or bridge (but not fuel tank) at the given map
+     *       location. If the given position doesn't exist, returns 0. Only units weighing on the building count, not
+     *       those flying above it.
+     */
+    public double getMassOfAllInBuilding(final Game game, final Coords coords, int boardId) {
         double mass = 0;
 
         // Add the mass of anyone else standing in/on this building.
-        final Hex hex = game.getBoard().getHex(coords);
-        final int buildingElevation = hex.terrainLevel(Terrains.BLDG_ELEV);
-        final int bridgeElevation = hex.terrainLevel(Terrains.BRIDGE_ELEV);
-        Iterator<Entity> crowd = game.getEntities(coords);
-        while (crowd.hasNext()) {
-            Entity e = crowd.next();
-
-            if (buildingElevation >= e.getElevation() || bridgeElevation >= e.getElevation()) {
-                mass += e.getWeight();
+        Hex hex = game.getHex(coords, boardId);
+        if (hex != null) {
+            int buildingElevation = hex.terrainLevel(Terrains.BLDG_ELEV);
+            int bridgeElevation = hex.terrainLevel(Terrains.BRIDGE_ELEV);
+            for (Entity unit : game.getEntitiesVector(coords, boardId)) {
+                //FIXME: This looks like a unit standing under a bridge would be inlcuded in the weight
+                if (buildingElevation >= unit.getElevation() || bridgeElevation >= unit.getElevation()) {
+                    mass += unit.getWeight();
+                }
             }
         }
 
@@ -644,9 +651,9 @@ public abstract class BotClient extends Client {
             }
 
             // Make sure we don't overload any buildings in this hex.
-            Building building = game.getBoard().getBuildingAt(dest);
+            Building building = game.getBoard(deployedUnit).getBuildingAt(dest);
             if (null != building) {
-                double mass = getMassOfAllInBuilding(game, dest) + deployedUnit.getWeight();
+                double mass = getMassOfAllInBuilding(game, dest, deployedUnit.getBoardId()) + deployedUnit.getWeight();
                 if (mass > building.getCurrentCF(dest)) {
                     continue;
                 }
@@ -663,7 +670,7 @@ public abstract class BotClient extends Client {
         int highest_elev, lowest_elev, weapon_count;
         double av_range, ideal_elev;
         double adjusted_damage, max_damage, total_damage;
-        Board board = game.getBoard();
+        Board board = game.getBoard(deployed_ent);
         Coords highestHex;
         List<RankedCoords> validCoords = new LinkedList<>();
         Vector<Entity> valid_attackers;
@@ -725,16 +732,16 @@ public abstract class BotClient extends Client {
         }
         for (Mounted<?> mounted : deployed_ent.getAmmo()) {
             AmmoType ammoType = (AmmoType) mounted.getType();
-            if (ammoType.getAmmoType() == AmmoType.T_ATM) {
+            if (ammoType.getAmmoType() == AmmoTypeEnum.ATM) {
                 weapon_count++;
                 av_range += 15.0;
-                if (ammoType.getMunitionType().contains(AmmoType.Munitions.M_HIGH_EXPLOSIVE)) {
+                if (ammoType.getMunitionType().contains(Munitions.M_HIGH_EXPLOSIVE)) {
                     av_range -= 6;
                 }
-                if (ammoType.getMunitionType().contains(AmmoType.Munitions.M_EXTENDED_RANGE)) {
+                if (ammoType.getMunitionType().contains(Munitions.M_EXTENDED_RANGE)) {
                     av_range += 12.0;
                 }
-            } else if (ammoType.getAmmoType() == AmmoType.T_MML) {
+            } else if (ammoType.getAmmoType() == AmmoTypeEnum.MML) {
                 weapon_count++;
                 if (ammoType.hasFlag(AmmoType.F_MML_LRM)) {
                     av_range = 9.0;
@@ -856,7 +863,7 @@ public abstract class BotClient extends Client {
                     coord.fitness += 4;
                 }
                 highestHex = coord.getCoords();
-                for (Entity test_ent : game.getEntitiesVector(highestHex)) {
+                for (Entity test_ent : game.getEntitiesVector(highestHex, deployed_ent.getBoardId())) {
                     if ((deployed_ent.getOwner().equals(test_ent.getOwner())) && !deployed_ent.equals(test_ent)) {
                         if (test_ent instanceof Infantry) {
                             coord.fitness += 2;
@@ -868,7 +875,7 @@ public abstract class BotClient extends Client {
                 Player owner = deployed_ent.getOwner();
                 for (int x = 0; x < 6 && !foundAdj; x++) {
                     highestHex = coord.getCoords().translated(x);
-                    for (Entity test_ent : game.getEntitiesVector(highestHex)) {
+                    for (Entity test_ent : game.getEntitiesVector(highestHex, deployed_ent.getBoardId())) {
                         if ((owner.equals(test_ent.getOwner())) &&
                                   !deployed_ent.equals(test_ent) &&
                                   (test_ent instanceof Infantry)) {
@@ -980,7 +987,7 @@ public abstract class BotClient extends Client {
 
     private double potentialBuildingDamage(int x, int y, Entity entity) {
         Coords coords = new Coords(x, y);
-        Building building = game.getBoard().getBuildingAt(coords);
+        Building building = game.getBoard(entity).getBuildingAt(coords);
         if (building == null) {
             return 0;
         }
@@ -1029,7 +1036,7 @@ public abstract class BotClient extends Client {
             AmmoType at = (AmmoType) weapon.getLinked().getType();
 
             float fHits;
-            if ((wt.getAmmoType() == AmmoType.T_SRM_STREAK) || (wt.getAmmoType() == AmmoType.T_LRM_STREAK)) {
+            if ((wt.getAmmoType() == AmmoTypeEnum.SRM_STREAK) || (wt.getAmmoType() == AmmoTypeEnum.LRM_STREAK)) {
                 fHits = wt.getRackSize();
             } else if ((wt.getRackSize() == 40) || (wt.getRackSize() == 30)) {
                 fHits = 2.0f * expectedHitsByRackSize[wt.getRackSize() / 2];

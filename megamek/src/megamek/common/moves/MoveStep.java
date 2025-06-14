@@ -508,13 +508,11 @@ public class MoveStep implements Serializable {
             setElevation(getElevation() + 1);
         } else if (isJumping()) {
             Hex hex = game.getBoard(boardId).getHex(getPosition());
-            Optional<Building> optionalBuilding = Optional.ofNullable(game.getBoard()
-                                                                            .getBuildingAt(entity.getPosition()));
+            Optional<Building> optionalBuilding = game.getBuildingAt(entity.getPosition(), boardId);
 
             boolean isInsideTheSameBuilding = false;
             if (optionalBuilding.isPresent()) {
-                Optional<Building> optionalBuildingAtCurrentStep = Optional.ofNullable(game.getBoard()
-                                                                                             .getBuildingAt(getPosition()));
+                Optional<Building> optionalBuildingAtCurrentStep = game.getBuildingAt(getPosition(), boardId);
                 if (optionalBuildingAtCurrentStep.isPresent()) {
                     isInsideTheSameBuilding = optionalBuildingAtCurrentStep.get().equals(optionalBuilding.get());
                 }
@@ -708,7 +706,7 @@ public class MoveStep implements Serializable {
         copy(game, prev);
 
         // Is this the first step?
-        prev = firstStepEval(game, entity, prev);
+        prev = evaluateFirstStep(game, entity, prev);
 
         PhasePass phasePass = PhasePassSelector.getPhasePass(getType());
         phasePass.execute(this, game, entity, prev, cachedEntityState);
@@ -747,24 +745,40 @@ public class MoveStep implements Serializable {
         compileIllegal(game, entity, prev, cachedEntityState);
     }
 
-    private MoveStep firstStepEval(Game game, Entity entity, MoveStep prev) {
+    /**
+     * Checks if this is counted to be the first step in a move path, which is the case when the given previous move
+     * step is null or does not count as an actual action. Returns the previous move step if it is not null and a fake
+     * "F" (forward move) first move step otherwise.
+     *
+     * @param prev The previous move step in the path, if any
+     *
+     * @return The previous move step if it is not null, a fake forward move step otherwise
+     */
+    private MoveStep evaluateFirstStep(Game game, Entity entity, MoveStep prev) {
         if (prev == null) {
-            prev = initializePrevStepForFirstStep(game, entity);
-        } else if (prev.isFirstStep() &&
-                         ((prev.getType() == MoveStepType.CLIMB_MODE_ON) ||
-                                (prev.getType() == MoveStepType.CLIMB_MODE_OFF))) {
-            setFirstStep(true);
+            setFirstStep();
+            return createFakeFirstStep(game, entity);
+
+        } else if (prev.isFirstStep() && prev.isClimbMode()) {
+            // A climb mode change is only meta info and does not count as an action
+            setFirstStep();
+
+        } else if (prev.isFirstStep()
+              && prev.isTurning
+              && entity instanceof Infantry infantry
+              && !entity.isBattleArmor()
+              && !infantry.hasActiveFieldArtillery()) {
+            // For CI, turning is only a graphical distinction unless they are field artillery
+            setFirstStep();
         }
         return prev;
     }
 
-    private MoveStep initializePrevStepForFirstStep(Game game, Entity entity) {
-        MoveStep prev;
-        prev = new MoveStep(null, MoveStepType.FORWARDS);
+    private MoveStep createFakeFirstStep(Game game, Entity entity) {
+        MoveStep prev = new MoveStep(null, MoveStepType.FORWARDS);
         prev.setFromEntity(entity, game);
         prev.isCarefulPath = isCareful();
         prev.isJumpingPath = isJumping();
-        setFirstStep(prev.mpUsed == 0); // Bug 1519330 - it's not a first step when continuing after a fall
         return prev;
     }
 
@@ -1287,8 +1301,8 @@ public class MoveStep implements Serializable {
         facing = i;
     }
 
-    protected void setFirstStep(boolean b) {
-        firstStep = b;
+    protected void setFirstStep() {
+        firstStep = true;
     }
 
     protected void setHasJustStood(boolean b) {
@@ -1429,16 +1443,6 @@ public class MoveStep implements Serializable {
         prevStepOnPavement = prev.isPavementStep();
         isTurning = prev.isTurning();
         isUnloaded = prev.isUnloaded();
-
-        // Infantry get a first step if all they've done is spin on the spot.
-        if (isInfantry && ((getMpUsed() - getMp()) == 0)) {
-            setFirstStep(true);
-
-            // getMpUsed() is the MPs used in the whole MovePath
-            // getMp() is the MPs used in the last (illegal) step (this step)
-            // if the difference between the whole path and this step is 0
-            // then this must be their first step
-        }
 
         // guilty until proven innocent
         movementType = EntityMovementType.MOVE_ILLEGAL;
@@ -1663,14 +1667,14 @@ public class MoveStep implements Serializable {
         } // end AERO stuff
 
         if (isInfantry && isJumping() && stepType == MoveStepType.DOWN) {
-            if (game.getBoard().getHex(curPos).containsTerrain(Terrains.BUILDING)) {
+            if (game.getBoard(boardId).getHex(curPos).containsTerrain(Terrains.BUILDING)) {
                 Coords startingPosition = entity.getPosition();
                 Coords adjacentCoords = curPos.translated(curPos.direction(startingPosition));
-                Hex adjacentHex = game.getBoard().getHex(adjacentCoords);
+                Hex adjacentHex = game.getHex(adjacentCoords, boardId);
 
                 boolean hasLOS = LosEffects.calculateLOS(game,
                       entity,
-                      new FloorTarget(curPos, game.getBoard(), getElevation())).canSee();
+                      new FloorTarget(curPos, game.getBoard(boardId), getElevation())).canSee();
 
                 if (adjacentHex.ceiling() >= getElevation() || !hasLOS) {
                     return; // can't enter the building from this direction
@@ -3791,5 +3795,12 @@ public class MoveStep implements Serializable {
 
     public int getBoardId() {
         return boardId;
+    }
+
+    /**
+     * @return True if this move step is a climb mode change (on or off)
+     */
+    public boolean isClimbMode() {
+        return (type == MoveStepType.CLIMB_MODE_ON) || (type == MoveStepType.CLIMB_MODE_OFF);
     }
 }

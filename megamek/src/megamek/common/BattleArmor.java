@@ -620,7 +620,7 @@ public class BattleArmor extends Infantry {
     public HitData rollHitLocation(int side, int aimedLocation, AimingMode aimingMode,
             boolean isAttackingConvInfantry) {
         // If this squad was killed, target trooper 1 (just because).
-        if (isDoomed()) {
+        if (isDoomed() || getNumberActiverTroopers() <= 0) {
             return new HitData(1);
         }
 
@@ -808,6 +808,11 @@ public class BattleArmor extends Infantry {
             return super.getOInternal(loc);
         }
         return IArmorState.ARMOR_NA;
+    }
+
+    @Override
+    public int getOriginalTrooperCount() {
+        return troopers;
     }
 
     /**
@@ -1267,7 +1272,7 @@ public class BattleArmor extends Infantry {
         // This allows for squad weapons and individual trooper weapons
         // such as NARC and the support weapons in TW/TO
         AmmoType at = (AmmoType) mountedAmmo.getType();
-        if (!(at.getAmmoType() == AmmoType.T_MINE)
+        if (!(at.getAmmoType() == AmmoType.AmmoTypeEnum.MINE)
                 && (mounted.getLocation() != mountedAmmo.getLocation())) {
             return false;
         }
@@ -1281,7 +1286,7 @@ public class BattleArmor extends Infantry {
         // This allows for squad weapons and individual trooper weapons
         // such as NARC and the support weapons in TW/TO
         AmmoType at = (AmmoType) mountedAmmo.getType();
-        if (!(at.getAmmoType() == AmmoType.T_MINE)
+        if (!(at.getAmmoType() == AmmoType.AmmoTypeEnum.MINE)
                 && (mounted.getLocation() != mountedAmmo.getLocation())) {
             return false;
         }
